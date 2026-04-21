@@ -10,6 +10,7 @@ type TheoryContext = {
 type MelodyContour = 'ascending' | 'descending' | 'arch' | 'wave' | 'static'
 type MelodyMotion = 'stepwise' | 'balanced' | 'leapy'
 type RhythmDensity = 'sparse' | 'balanced' | 'busy'
+type PhraseSection = 'opening' | 'middle' | 'cadence'
 type MelodyPlan = {
   contour: MelodyContour
   motion: MelodyMotion
@@ -20,10 +21,16 @@ type RhythmPlan = {
   density: RhythmDensity
   values: string[]
 }
+type PhrasePlan = {
+  sections: PhraseSection[]
+  cadenceTone: string
+  repetitionSpan: number
+}
 type CompositionPlan = {
   theory: TheoryContext
   melody: MelodyPlan
   rhythm: RhythmPlan
+  phrase: PhrasePlan
 }
 type ScoreEvent = {
   pitch: string | null
@@ -32,6 +39,7 @@ type ScoreEvent = {
 }
 type MeasureModel = {
   events: ScoreEvent[]
+  phraseSection: PhraseSection
 }
 
 type ScoreModel = {
@@ -41,7 +49,6 @@ type ScoreModel = {
 }
 
 const NOTE_RANGE = ['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4', 'C5']
-const RHYTHM_VALUES = ['whole', 'half', 'quarter', 'eighth', 'sixteenth'] as const
 const DURATION_BEATS: Record<string, number> = {
   whole: 4,
   half: 2,
@@ -136,12 +143,14 @@ function parseMotion(prompt: string): MelodyMotion {
 }
 
 function parseMelodicPitches(prompt: string): string[] {
-  return tokenize(prompt).filter((token) => /^[A-Ga-g][#b]?\d$/.test(token)).map((token) => {
-    const letter = token[0].toUpperCase()
-    const accidental = token.length === 3 ? token[1].replace('B', 'b') : ''
-    const octave = token[token.length - 1]
-    return `${letter}${accidental}${octave}`
-  })
+  return tokenize(prompt)
+    .filter((token) => /^[A-Ga-g][#b]?\d$/.test(token))
+    .map((token) => {
+      const letter = token[0].toUpperCase()
+      const accidental = token.length === 3 ? token[1].replace('B', 'b') : ''
+      const octave = token[token.length - 1]
+      return `${letter}${accidental}${octave}`
+    })
 }
 
 function getMeasureBeatCount(timeSignature: TimeSignature): number {
@@ -222,6 +231,19 @@ function buildRhythmBrain(args: {
   return { density: 'balanced', values: Array.from({ length: Math.max(1, Math.round(measureBeats)) }, () => 'quarter') }
 }
 
+function buildPhraseBrain(args: { bars: number; theory: TheoryContext; prompt: string }): PhrasePlan {
+  const { bars, theory, prompt } = args
+  const sections: PhraseSection[] = Array.from({ length: Math.max(1, bars) }, (_, index) => {
+    if (bars === 1) return 'cadence'
+    if (index === 0) return 'opening'
+    if (index === bars - 1) return 'cadence'
+    return 'middle'
+  })
+  const cadenceTone = theory.scale[0] || `${theory.tonic}4`
+  const repetitionSpan = prompt.toLowerCase().includes('variation') ? 1 : Math.min(2, Math.max(1, bars - 1))
+  return { sections, cadenceTone, repetitionSpan }
+}
+
 function assembleCompositionPlan(args: {
   prompt: string
   timeSignature: TimeSignature
@@ -246,12 +268,47 @@ function assembleCompositionPlan(args: {
     generatedRhythmPreset: args.generatedRhythmPreset,
     selectedRhythmPreset: args.selectedRhythmPreset,
   })
-  return { theory, melody, rhythm }
+  const phrase = buildPhraseBrain({ bars: args.bars, theory, prompt: args.prompt })
+  return { theory, melody, rhythm, phrase }
+}
+
+function applyPhraseToMeasure(args: {
+  section: PhraseSection
+  sourceEvents: ScoreEvent[]
+  theory: TheoryContext
+  cadenceTone: string
+  repetitionSource?: ScoreEvent[]
+}): ScoreEvent[] {
+  const { section, sourceEvents, theory, cadenceTone, repetitionSource } = args
+  const events = sourceEvents.map((event) => ({ ...event }))
+  if (section === 'opening') {
+    if (events[0]) events[0].pitch = theory.scale[0] || events[0].pitch
+    return events
+  }
+  if (section === 'middle') {
+    if (repetitionSource && repetitionSource.length === events.length) {
+      return repetitionSource.map((event, index) => {
+        if (index % 2 === 0) return { ...event }
+        const current = theory.scale.indexOf(event.pitch || '')
+        const nextIndex = current >= 0 ? Math.min(theory.scale.length - 1, current + 1) : 1
+        return { ...event, pitch: theory.scale[nextIndex] || event.pitch }
+      })
+    }
+    return events
+  }
+  if (events.length > 0) {
+    events[events.length - 1] = { ...events[events.length - 1], pitch: cadenceTone }
+    if (events.length > 1) {
+      const penultimate = theory.scale[4] || theory.scale[1] || cadenceTone
+      events[events.length - 2] = { ...events[events.length - 2], pitch: penultimate }
+    }
+  }
+  return events
 }
 
 function compositionPlanToScore(plan: CompositionPlan, timeSignature: TimeSignature, bars: number): ScoreModel {
   const beatsPerBar = getMeasureBeatCount(timeSignature)
-  const measures: MeasureModel[] = []
+  const baseMeasures: MeasureModel[] = []
   let pitchIndex = 0
   let rhythmIndex = 0
   for (let bar = 0; bar < Math.max(1, bars); bar += 1) {
@@ -267,8 +324,23 @@ function compositionPlanToScore(plan: CompositionPlan, timeSignature: TimeSignat
       pitchIndex += 1
       rhythmIndex += 1
     }
-    measures.push({ events })
+    baseMeasures.push({ events, phraseSection: plan.phrase.sections[bar] || 'middle' })
   }
+
+  const measures = baseMeasures.map((measure, index) => {
+    const repetitionSource = index >= plan.phrase.repetitionSpan ? baseMeasures[index - plan.phrase.repetitionSpan]?.events : undefined
+    return {
+      phraseSection: measure.phraseSection,
+      events: applyPhraseToMeasure({
+        section: measure.phraseSection,
+        sourceEvents: measure.events,
+        theory: plan.theory,
+        cadenceTone: plan.phrase.cadenceTone,
+        repetitionSource,
+      }),
+    }
+  })
+
   return { keySignature: plan.theory.keySignature, timeSignature, measures }
 }
 
@@ -283,21 +355,26 @@ function runPrototypeTests() {
   expect('simple pitch generator length is correct', buildSimpleGeneratedPitchPreset({ startNote: 'C4', direction: 'up', length: 4, rangeMode: 'small', allowRepeats: true }).length === 4)
   expect('simple rhythm generator length is correct', buildSimpleGeneratedRhythmPreset({ rhythmMode: 'eighths', measureLength: 4 }).length === 8)
 
+  const phrasePlan = buildPhraseBrain({ bars: 3, theory: buildTheoryContext('Write a melody in G major'), prompt: 'Write a phrase in G major' })
+  expect('phrase brain marks opening first', phrasePlan.sections[0] === 'opening')
+  expect('phrase brain marks cadence last', phrasePlan.sections[2] === 'cadence')
+
   const score = compositionPlanToScore(
     assembleCompositionPlan({
       prompt: 'Write an arch stepwise melody in G major with quarter notes in 4/4',
       timeSignature: { numerator: 4, denominator: 4 },
-      bars: 1,
+      bars: 2,
       selectedPitchPreset: 'none',
       selectedRhythmPreset: 'none',
       generatedPitchPreset: [],
       generatedRhythmPreset: [],
     }),
     { numerator: 4, denominator: 4 },
-    1,
+    2,
   )
-  expect('score builds one measure', score.measures.length === 1)
+  expect('score builds two measures', score.measures.length === 2)
   expect('score fills measure with quarter notes', score.measures[0].events.length === 4)
+  expect('cadence measure ends on tonic', score.measures[1].events[score.measures[1].events.length - 1].pitch === 'G4')
 
   return results
 }
@@ -378,6 +455,7 @@ export default function App() {
             <div>Contour: {compositionPlan.melody.contour}</div>
             <div>Motion: {compositionPlan.melody.motion}</div>
             <div>Density: {compositionPlan.rhythm.density}</div>
+            <div>Phrase cadence tone: {compositionPlan.phrase.cadenceTone}</div>
           </SectionCard>
 
           <SectionCard title="Prompt Input">
@@ -401,7 +479,9 @@ export default function App() {
             <div style={{ display: 'grid', gap: 12 }}>
               {musicModel.measures.map((measure, index) => (
                 <div key={index} style={{ border: '1px solid #ddd', borderRadius: 12, padding: 12, background: '#fafafa' }}>
-                  <div style={{ fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#666', marginBottom: 8 }}>Measure {index + 1}</div>
+                  <div style={{ fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#666', marginBottom: 8 }}>
+                    Measure {index + 1} · {measure.phraseSection}
+                  </div>
                   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                     {measure.events.map((event, eventIndex) => (
                       <div key={eventIndex} style={{ minWidth: 88, padding: 12, borderRadius: 12, border: '1px solid #ccc', background: '#fff' }}>
@@ -481,6 +561,9 @@ export default function App() {
             <div>Melody motion: {compositionPlan.melody.motion}</div>
             <div>Rhythm density: {compositionPlan.rhythm.density}</div>
             <div>Rhythm values: {compositionPlan.rhythm.values.join(' · ')}</div>
+            <div>Phrase sections: {compositionPlan.phrase.sections.join(' · ')}</div>
+            <div>Cadence tone: {compositionPlan.phrase.cadenceTone}</div>
+            <div>Repetition span: {compositionPlan.phrase.repetitionSpan}</div>
           </SectionCard>
 
           <SectionCard title="Prototype Checks">
