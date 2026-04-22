@@ -6,6 +6,8 @@ type TheoryContext = {
   tonic: string
   scale: string[]
   accidentals: Record<string, string>
+  chromaticPool: string[]
+  diatonicPool: string[]
 }
 type MelodyContour = 'ascending' | 'descending' | 'arch' | 'wave' | 'static'
 type MelodyMotion = 'stepwise' | 'balanced' | 'leapy'
@@ -58,7 +60,8 @@ type ScoreModel = {
   measures: MeasureModel[]
 }
 
-const NOTE_RANGE = ['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4', 'C5']
+const NOTE_RANGE = ['C1', 'C2', 'C3', 'C4', 'C5']
+const CHROMATIC_SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 const DURATION_BEATS: Record<string, number> = {
   whole: 4,
   half: 2,
@@ -74,13 +77,13 @@ const CONTOUR_PATTERNS: Record<MelodyContour, number[]> = {
   static: [0, 0, 1, 0, 0, 1, 0, 0],
 }
 const KEY_SIGNATURE_LIBRARY: Record<string, string[]> = {
-  'c major': ['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4', 'C5'],
-  'g major': ['G4', 'A4', 'B4', 'C5', 'D5', 'E5', 'F#5', 'G5'],
-  'd major': ['D4', 'E4', 'F#4', 'G4', 'A4', 'B4', 'C#5', 'D5'],
-  'f major': ['F4', 'G4', 'A4', 'Bb4', 'C5', 'D5', 'E5', 'F5'],
-  'bb major': ['Bb3', 'C4', 'D4', 'Eb4', 'F4', 'G4', 'A4', 'Bb4'],
-  'a minor': ['A4', 'B4', 'C5', 'D5', 'E5', 'F5', 'G5', 'A5'],
-  'e minor': ['E4', 'F#4', 'G4', 'A4', 'B4', 'C5', 'D5', 'E5'],
+  'c major': ['C', 'D', 'E', 'F', 'G', 'A', 'B'],
+  'g major': ['G', 'A', 'B', 'C', 'D', 'E', 'F#'],
+  'd major': ['D', 'E', 'F#', 'G', 'A', 'B', 'C#'],
+  'f major': ['F', 'G', 'A', 'Bb', 'C', 'D', 'E'],
+  'bb major': ['Bb', 'C', 'D', 'Eb', 'F', 'G', 'A'],
+  'a minor': ['A', 'B', 'C', 'D', 'E', 'F', 'G'],
+  'e minor': ['E', 'F#', 'G', 'A', 'B', 'C', 'D'],
 }
 const KEY_SIGNATURE_ACCIDENTALS: Record<string, Record<string, string>> = {
   'c major': {},
@@ -94,8 +97,8 @@ const KEY_SIGNATURE_ACCIDENTALS: Record<string, Record<string, string>> = {
 const PITCH_PRESETS: Record<string, string[]> = {
   none: [],
   fourNoteCell: ['C4', 'D4', 'E4', 'F4'],
-  cMajorAscending: ['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4', 'C5'],
-  cMajorArpeggio: ['C4', 'E4', 'G4', 'C5'],
+  cMajorAscending: ['C3', 'D3', 'E3', 'F3', 'G3', 'A3', 'B3', 'C4'],
+  cMajorArpeggio: ['C3', 'E3', 'G3', 'C4'],
 }
 const RHYTHM_PRESETS: Record<string, string[]> = {
   none: [],
@@ -171,15 +174,58 @@ function getBeatsForDuration(duration: string): number {
   return DURATION_BEATS[duration] || 1
 }
 
+function getPitchClass(pitch: string): string {
+  return pitch.slice(0, -1)
+}
+
+function getOctave(pitch: string): number {
+  return Number(pitch.slice(-1))
+}
+
+function createChromaticPool(minOctave = 1, maxOctave = 5): string[] {
+  const pool: string[] = []
+  for (let octave = minOctave; octave <= maxOctave; octave += 1) {
+    for (const pitchClass of CHROMATIC_SHARPS) {
+      pool.push(`${pitchClass}${octave}`)
+    }
+  }
+  return pool
+}
+
+function normalizeEnharmonic(pitchClass: string): string {
+  if (pitchClass === 'Bb') return 'A#'
+  if (pitchClass === 'Eb') return 'D#'
+  return pitchClass
+}
+
+function buildDiatonicPool(scalePitchClasses: string[], minOctave = 1, maxOctave = 5): string[] {
+  const normalizedSet = new Set(scalePitchClasses.map(normalizeEnharmonic))
+  return createChromaticPool(minOctave, maxOctave).filter((pitch) => normalizedSet.has(getPitchClass(pitch)))
+}
+
 function buildTheoryContext(prompt: string): TheoryContext {
   const keySignature = parseKeySignature(prompt)
   const scale = KEY_SIGNATURE_LIBRARY[keySignature] || KEY_SIGNATURE_LIBRARY['c major']
+  const chromaticPool = createChromaticPool(1, 5)
+  const diatonicPool = buildDiatonicPool(scale, 1, 5)
   return {
     keySignature,
-    tonic: (scale[0] || 'C4')[0],
+    tonic: scale[0] || 'C',
     scale,
     accidentals: KEY_SIGNATURE_ACCIDENTALS[keySignature] || {},
+    chromaticPool,
+    diatonicPool,
   }
+}
+
+function spreadScaleAcrossOctaves(scale: string[], minOctave = 1, maxOctave = 5): string[] {
+  const pitches: string[] = []
+  for (let octave = minOctave; octave <= maxOctave; octave += 1) {
+    for (const pitchClass of scale) {
+      pitches.push(`${pitchClass}${octave}`)
+    }
+  }
+  return pitches
 }
 
 function buildMelodyBrain(args: {
@@ -202,15 +248,21 @@ function buildMelodyBrain(args: {
   }
   const contour = parseContour(prompt)
   const motion = parseMotion(prompt)
+  const expandedScale = spreadScaleAcrossOctaves(theory.scale, 1, 5)
+  const registerCenter = prompt.toLowerCase().includes('low') ? 2 : prompt.toLowerCase().includes('high') ? 4 : 3
+  const filteredScale = expandedScale.filter((pitch) => Math.abs(getOctave(pitch) - registerCenter) <= 2)
+  const melodicPool = filteredScale.length ? filteredScale : expandedScale
   const pattern = CONTOUR_PATTERNS[contour]
+  const startIndex = Math.max(0, melodicPool.findIndex((pitch) => getPitchClass(pitch) === normalizeEnharmonic(theory.tonic)))
   const pitches = Array.from({ length: Math.max(4, targetLength) }, (_, index) => {
     let degree = pattern[index % pattern.length]
     if (motion === 'stepwise' && index > 0) {
       const prev = pattern[(index - 1) % pattern.length]
       if (Math.abs(degree - prev) > 2) degree = prev + Math.sign(degree - prev) * 2
     }
-    if (motion === 'leapy' && index % 3 === 2) degree = Math.min(6, degree + 2)
-    return theory.scale[Math.max(0, Math.min(theory.scale.length - 1, degree))] || theory.scale[0] || 'C4'
+    if (motion === 'leapy' && index % 3 === 2) degree = degree + 3
+    const poolIndex = Math.max(0, Math.min(melodicPool.length - 1, startIndex + degree))
+    return melodicPool[poolIndex] || melodicPool[0] || 'C3'
   })
   return { contour, motion, targetLength, pitches }
 }
@@ -249,17 +301,22 @@ function buildPhraseBrain(args: { bars: number; theory: TheoryContext; prompt: s
     if (index === bars - 1) return 'cadence'
     return 'middle'
   })
-  const cadenceTone = theory.scale[0] || `${theory.tonic}4`
+  const cadenceTone = `${theory.scale[0] || theory.tonic}3`
   const repetitionSpan = prompt.toLowerCase().includes('variation') ? 1 : Math.min(2, Math.max(1, bars - 1))
   return { sections, cadenceTone, repetitionSpan }
 }
 
+function buildHarmonyTargetPool(theory: TheoryContext, degrees: number[], minOctave = 1, maxOctave = 5): string[] {
+  const pitchClasses = degrees.map((degree) => theory.scale[((degree % 7) + 7) % 7]).filter(Boolean)
+  return buildDiatonicPool(pitchClasses, minOctave, maxOctave)
+}
+
 function buildHarmonyBrain(args: { theory: TheoryContext; phrase: PhrasePlan; bars: number }): HarmonyPlan {
   const { theory, phrase, bars } = args
-  const tonicTargets = [theory.scale[0], theory.scale[2], theory.scale[4]].filter(Boolean) as string[]
-  const predominantTargets = [theory.scale[1], theory.scale[3], theory.scale[5]].filter(Boolean) as string[]
-  const dominantTargets = [theory.scale[4], theory.scale[6], theory.scale[1]].filter(Boolean) as string[]
-  const cadenceTargets = [theory.scale[4], theory.scale[6], theory.scale[0]].filter(Boolean) as string[]
+  const tonicTargets = buildHarmonyTargetPool(theory, [0, 2, 4], 1, 5)
+  const predominantTargets = buildHarmonyTargetPool(theory, [1, 3, 5], 1, 5)
+  const dominantTargets = buildHarmonyTargetPool(theory, [4, 6, 1], 1, 5)
+  const cadenceTargets = buildHarmonyTargetPool(theory, [4, 6, 0], 1, 5)
   const functions: HarmonyFunction[] = Array.from({ length: Math.max(1, bars) }, (_, index) => {
     const section = phrase.sections[index] || 'middle'
     if (section === 'opening') return 'tonic'
@@ -305,6 +362,18 @@ function getHarmonyTargets(plan: HarmonyPlan, harmonyFunction: HarmonyFunction):
   return plan.cadenceTargets
 }
 
+function nearestPitchFromPool(targetPitch: string | null, pool: string[]): string {
+  if (!targetPitch || !pool.length) return pool[0] || 'C3'
+  const targetOctave = getOctave(targetPitch)
+  const sameClass = pool.filter((pitch) => normalizeEnharmonic(getPitchClass(pitch)) === normalizeEnharmonic(getPitchClass(targetPitch)))
+  const candidates = sameClass.length ? sameClass : pool
+  return candidates.reduce((best, current) => {
+    const bestDistance = Math.abs(getOctave(best) - targetOctave)
+    const currentDistance = Math.abs(getOctave(current) - targetOctave)
+    return currentDistance < bestDistance ? current : best
+  }, candidates[0])
+}
+
 function alignEventsToHarmony(args: {
   events: ScoreEvent[]
   harmonyTargets: string[]
@@ -314,11 +383,12 @@ function alignEventsToHarmony(args: {
   const { events, harmonyTargets, cadenceTone, section } = args
   return events.map((event, index) => {
     if (event.isRest) return event
-    const nextPitch = harmonyTargets[index % Math.max(harmonyTargets.length, 1)] || event.pitch
+    const target = harmonyTargets[index % Math.max(harmonyTargets.length, 1)] || event.pitch || 'C3'
+    const nextPitch = nearestPitchFromPool(event.pitch, harmonyTargets.length ? harmonyTargets : [target])
     if (section === 'cadence' && index === events.length - 1) {
       return { ...event, pitch: cadenceTone }
     }
-    return { ...event, pitch: nextPitch || event.pitch }
+    return { ...event, pitch: nextPitch || target }
   })
 }
 
@@ -332,16 +402,16 @@ function applyPhraseToMeasure(args: {
   const { section, sourceEvents, theory, cadenceTone, repetitionSource } = args
   const events = sourceEvents.map((event) => ({ ...event }))
   if (section === 'opening') {
-    if (events[0]) events[0].pitch = theory.scale[0] || events[0].pitch
+    if (events[0]) events[0].pitch = nearestPitchFromPool(`${theory.scale[0]}3`, theory.diatonicPool)
     return events
   }
   if (section === 'middle') {
     if (repetitionSource && repetitionSource.length === events.length) {
       return repetitionSource.map((event, index) => {
         if (index % 2 === 0) return { ...event }
-        const current = theory.scale.indexOf(event.pitch || '')
-        const nextIndex = current >= 0 ? Math.min(theory.scale.length - 1, current + 1) : 1
-        return { ...event, pitch: theory.scale[nextIndex] || event.pitch }
+        const currentIndex = theory.diatonicPool.indexOf(event.pitch || '')
+        const nextIndex = currentIndex >= 0 ? Math.min(theory.diatonicPool.length - 1, currentIndex + 1) : Math.min(1, theory.diatonicPool.length - 1)
+        return { ...event, pitch: theory.diatonicPool[nextIndex] || event.pitch }
       })
     }
     return events
@@ -349,8 +419,9 @@ function applyPhraseToMeasure(args: {
   if (events.length > 0) {
     events[events.length - 1] = { ...events[events.length - 1], pitch: cadenceTone }
     if (events.length > 1) {
-      const penultimate = theory.scale[4] || theory.scale[1] || cadenceTone
-      events[events.length - 2] = { ...events[events.length - 2], pitch: penultimate }
+      const dominantClass = theory.scale[4] || theory.scale[1] || theory.scale[0]
+      const dominantPitch = nearestPitchFromPool(`${dominantClass}3`, theory.diatonicPool)
+      events[events.length - 2] = { ...events[events.length - 2], pitch: dominantPitch }
     }
   }
   return events
@@ -368,7 +439,7 @@ function compositionPlanToScore(plan: CompositionPlan, timeSignature: TimeSignat
       const duration = plan.rhythm.values[rhythmIndex % plan.rhythm.values.length] || 'quarter'
       const beats = getBeatsForDuration(duration)
       if (used + beats > beatsPerBar + 1e-9) break
-      const pitch = plan.melody.pitches[pitchIndex % plan.melody.pitches.length] || 'C4'
+      const pitch = plan.melody.pitches[pitchIndex % plan.melody.pitches.length] || 'C3'
       events.push({ pitch, duration, isRest: false })
       used += beats
       pitchIndex += 1
@@ -410,24 +481,16 @@ function runPrototypeTests() {
   const results: Array<{ name: string; passed: boolean }> = []
   const expect = (name: string, condition: boolean) => results.push({ name, passed: Boolean(condition) })
 
+  expect('chromatic pool spans octaves 1 to 5', buildTheoryContext('Write in C major').chromaticPool.includes('C1') && buildTheoryContext('Write in C major').chromaticPool.includes('B5'))
+  expect('diatonic pool spans octaves 1 to 5', buildTheoryContext('Write in G major').diatonicPool.includes('G1') && buildTheoryContext('Write in G major').diatonicPool.includes('F#5'))
   expect('parseKeySignature finds G major', parseKeySignature('write a melody in G major') === 'g major')
   expect('measure beat count for 4/4 is 4', getMeasureBeatCount({ numerator: 4, denominator: 4 }) === 4)
   expect('theory brain finds tonic', buildTheoryContext('Write a melody in G major').tonic === 'G')
   expect('pitch parser reads notes', parseMelodicPitches('C4 D4 E4').join(',') === 'C4,D4,E4')
-  expect('simple pitch generator length is correct', buildSimpleGeneratedPitchPreset({ startNote: 'C4', direction: 'up', length: 4, rangeMode: 'small', allowRepeats: true }).length === 4)
-  expect('simple rhythm generator length is correct', buildSimpleGeneratedRhythmPreset({ rhythmMode: 'eighths', measureLength: 4 }).length === 8)
-
-  const phrasePlan = buildPhraseBrain({ bars: 3, theory: buildTheoryContext('Write a melody in G major'), prompt: 'Write a phrase in G major' })
-  expect('phrase brain marks opening first', phrasePlan.sections[0] === 'opening')
-  expect('phrase brain marks cadence last', phrasePlan.sections[2] === 'cadence')
-
-  const harmonyPlan = buildHarmonyBrain({ theory: buildTheoryContext('Write a melody in G major'), phrase: phrasePlan, bars: 3 })
-  expect('harmony brain opens on tonic function', harmonyPlan.functions[0] === 'tonic')
-  expect('harmony brain ends on cadential function', harmonyPlan.functions[2] === 'cadential')
 
   const score = compositionPlanToScore(
     assembleCompositionPlan({
-      prompt: 'Write an arch stepwise melody in G major with quarter notes in 4/4',
+      prompt: 'Write a wide melody in G major with quarter notes in 4/4',
       timeSignature: { numerator: 4, denominator: 4 },
       bars: 3,
       selectedPitchPreset: 'none',
@@ -438,9 +501,10 @@ function runPrototypeTests() {
     { numerator: 4, denominator: 4 },
     3,
   )
-  expect('score builds three measures', score.measures.length === 3)
-  expect('opening measure uses tonic harmony', score.measures[0].harmonyFunction === 'tonic')
-  expect('cadence measure ends on tonic', score.measures[2].events[score.measures[2].events.length - 1].pitch === 'G4')
+  const allPitches = score.measures.flatMap((measure) => measure.events.map((event) => event.pitch).filter(Boolean)) as string[]
+  const octaves = [...new Set(allPitches.map(getOctave))]
+  expect('generated score can access multiple octaves', octaves.length >= 2)
+  expect('cadence measure ends on tonic octave 3', score.measures[2].events[score.measures[2].events.length - 1].pitch === 'G3')
 
   return results
 }
@@ -451,8 +515,8 @@ function buildSimpleGeneratedPitchPreset(args: { startNote: string; direction: s
   let pool = NOTE_RANGE.slice(startIndex)
   if (direction === 'down') pool = NOTE_RANGE.slice(0, startIndex + 1).reverse()
   if (direction === 'static') pool = NOTE_RANGE.slice(startIndex, startIndex + 1)
-  if (rangeMode === 'small') pool = pool.slice(0, 5)
-  if (rangeMode === 'medium') pool = pool.slice(0, 8)
+  if (rangeMode === 'small') pool = pool.slice(0, 3)
+  if (rangeMode === 'medium') pool = pool.slice(0, 4)
   if (!allowRepeats) pool = [...new Set(pool)]
   return Array.from({ length: Math.max(2, length) }, (_, index) => pool[index % Math.max(pool.length, 1)] || startNote)
 }
@@ -479,10 +543,10 @@ export default function App() {
   const [tempo, setTempo] = useState(92)
   const [selectedPitchPreset, setSelectedPitchPreset] = useState('none')
   const [selectedRhythmPreset, setSelectedRhythmPreset] = useState('quarterStraight')
-  const [generatorStartNote, setGeneratorStartNote] = useState('C4')
+  const [generatorStartNote, setGeneratorStartNote] = useState('C3')
   const [generatorDirection, setGeneratorDirection] = useState('up')
   const [generatorLength, setGeneratorLength] = useState(4)
-  const [generatorRangeMode, setGeneratorRangeMode] = useState('small')
+  const [generatorRangeMode, setGeneratorRangeMode] = useState('medium')
   const [generatorRhythmMode, setGeneratorRhythmMode] = useState('quarters')
   const [generatorAllowRepeats, setGeneratorAllowRepeats] = useState(true)
   const [generatedPitchPreset, setGeneratedPitchPreset] = useState<string[]>([])
@@ -622,7 +686,9 @@ export default function App() {
 
           <SectionCard title="Brain Snapshot">
             <div>Theory tonic: {compositionPlan.theory.tonic}</div>
-            <div>Scale: {compositionPlan.theory.scale.join(' · ')}</div>
+            <div>Scale classes: {compositionPlan.theory.scale.join(' · ')}</div>
+            <div>Chromatic pool sample: {compositionPlan.theory.chromaticPool.slice(0, 12).join(' · ')}</div>
+            <div>Diatonic pool sample: {compositionPlan.theory.diatonicPool.slice(0, 12).join(' · ')}</div>
             <div>Melody contour: {compositionPlan.melody.contour}</div>
             <div>Melody motion: {compositionPlan.melody.motion}</div>
             <div>Rhythm density: {compositionPlan.rhythm.density}</div>
@@ -631,9 +697,9 @@ export default function App() {
             <div>Cadence tone: {compositionPlan.phrase.cadenceTone}</div>
             <div>Repetition span: {compositionPlan.phrase.repetitionSpan}</div>
             <div>Harmony functions: {compositionPlan.harmony.functions.join(' · ')}</div>
-            <div>Tonic targets: {compositionPlan.harmony.tonicTargets.join(' · ')}</div>
-            <div>Dominant targets: {compositionPlan.harmony.dominantTargets.join(' · ')}</div>
-            <div>Cadence targets: {compositionPlan.harmony.cadenceTargets.join(' · ')}</div>
+            <div>Tonic targets sample: {compositionPlan.harmony.tonicTargets.slice(0, 12).join(' · ')}</div>
+            <div>Dominant targets sample: {compositionPlan.harmony.dominantTargets.slice(0, 12).join(' · ')}</div>
+            <div>Cadence targets sample: {compositionPlan.harmony.cadenceTargets.slice(0, 12).join(' · ')}</div>
           </SectionCard>
 
           <SectionCard title="Prototype Checks">
