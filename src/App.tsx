@@ -488,7 +488,7 @@ export default function App() {
   const [bars, setBars] = useState(3)
   const [tempo, setTempo] = useState(92)
   const [selectedPitchPreset, setSelectedPitchPreset] = useState('none')
-  const [selectedRhythmPreset, setSelectedRhythmPreset] = useState('quarterStraight')
+  const [selectedRhythmPreset, setSelectedRhythmPreset] = useState('none')
   const [generatorStartNote, setGeneratorStartNote] = useState('C3')
   const [generatorDirection, setGeneratorDirection] = useState('up')
   const [generatorLength, setGeneratorLength] = useState(4)
