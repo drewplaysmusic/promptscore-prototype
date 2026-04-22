@@ -11,6 +11,7 @@ type MelodyContour = 'ascending' | 'descending' | 'arch' | 'wave' | 'static'
 type MelodyMotion = 'stepwise' | 'balanced' | 'leapy'
 type RhythmDensity = 'sparse' | 'balanced' | 'busy'
 type PhraseSection = 'opening' | 'middle' | 'cadence'
+type HarmonyFunction = 'tonic' | 'predominant' | 'dominant' | 'cadential'
 type MelodyPlan = {
   contour: MelodyContour
   motion: MelodyMotion
@@ -26,11 +27,19 @@ type PhrasePlan = {
   cadenceTone: string
   repetitionSpan: number
 }
+type HarmonyPlan = {
+  functions: HarmonyFunction[]
+  tonicTargets: string[]
+  predominantTargets: string[]
+  dominantTargets: string[]
+  cadenceTargets: string[]
+}
 type CompositionPlan = {
   theory: TheoryContext
   melody: MelodyPlan
   rhythm: RhythmPlan
   phrase: PhrasePlan
+  harmony: HarmonyPlan
 }
 type ScoreEvent = {
   pitch: string | null
@@ -40,6 +49,7 @@ type ScoreEvent = {
 type MeasureModel = {
   events: ScoreEvent[]
   phraseSection: PhraseSection
+  harmonyFunction: HarmonyFunction
 }
 
 type ScoreModel = {
@@ -244,6 +254,21 @@ function buildPhraseBrain(args: { bars: number; theory: TheoryContext; prompt: s
   return { sections, cadenceTone, repetitionSpan }
 }
 
+function buildHarmonyBrain(args: { theory: TheoryContext; phrase: PhrasePlan; bars: number }): HarmonyPlan {
+  const { theory, phrase, bars } = args
+  const tonicTargets = [theory.scale[0], theory.scale[2], theory.scale[4]].filter(Boolean) as string[]
+  const predominantTargets = [theory.scale[1], theory.scale[3], theory.scale[5]].filter(Boolean) as string[]
+  const dominantTargets = [theory.scale[4], theory.scale[6], theory.scale[1]].filter(Boolean) as string[]
+  const cadenceTargets = [theory.scale[4], theory.scale[6], theory.scale[0]].filter(Boolean) as string[]
+  const functions: HarmonyFunction[] = Array.from({ length: Math.max(1, bars) }, (_, index) => {
+    const section = phrase.sections[index] || 'middle'
+    if (section === 'opening') return 'tonic'
+    if (section === 'cadence') return 'cadential'
+    return index % 2 === 0 ? 'predominant' : 'dominant'
+  })
+  return { functions, tonicTargets, predominantTargets, dominantTargets, cadenceTargets }
+}
+
 function assembleCompositionPlan(args: {
   prompt: string
   timeSignature: TimeSignature
@@ -269,7 +294,32 @@ function assembleCompositionPlan(args: {
     selectedRhythmPreset: args.selectedRhythmPreset,
   })
   const phrase = buildPhraseBrain({ bars: args.bars, theory, prompt: args.prompt })
-  return { theory, melody, rhythm, phrase }
+  const harmony = buildHarmonyBrain({ theory, phrase, bars: args.bars })
+  return { theory, melody, rhythm, phrase, harmony }
+}
+
+function getHarmonyTargets(plan: HarmonyPlan, harmonyFunction: HarmonyFunction): string[] {
+  if (harmonyFunction === 'tonic') return plan.tonicTargets
+  if (harmonyFunction === 'predominant') return plan.predominantTargets
+  if (harmonyFunction === 'dominant') return plan.dominantTargets
+  return plan.cadenceTargets
+}
+
+function alignEventsToHarmony(args: {
+  events: ScoreEvent[]
+  harmonyTargets: string[]
+  cadenceTone: string
+  section: PhraseSection
+}): ScoreEvent[] {
+  const { events, harmonyTargets, cadenceTone, section } = args
+  return events.map((event, index) => {
+    if (event.isRest) return event
+    const nextPitch = harmonyTargets[index % Math.max(harmonyTargets.length, 1)] || event.pitch
+    if (section === 'cadence' && index === events.length - 1) {
+      return { ...event, pitch: cadenceTone }
+    }
+    return { ...event, pitch: nextPitch || event.pitch }
+  })
 }
 
 function applyPhraseToMeasure(args: {
@@ -324,19 +374,31 @@ function compositionPlanToScore(plan: CompositionPlan, timeSignature: TimeSignat
       pitchIndex += 1
       rhythmIndex += 1
     }
-    baseMeasures.push({ events, phraseSection: plan.phrase.sections[bar] || 'middle' })
+    baseMeasures.push({
+      events,
+      phraseSection: plan.phrase.sections[bar] || 'middle',
+      harmonyFunction: plan.harmony.functions[bar] || 'tonic',
+    })
   }
 
   const measures = baseMeasures.map((measure, index) => {
     const repetitionSource = index >= plan.phrase.repetitionSpan ? baseMeasures[index - plan.phrase.repetitionSpan]?.events : undefined
+    const phraseEvents = applyPhraseToMeasure({
+      section: measure.phraseSection,
+      sourceEvents: measure.events,
+      theory: plan.theory,
+      cadenceTone: plan.phrase.cadenceTone,
+      repetitionSource,
+    })
+    const harmonyTargets = getHarmonyTargets(plan.harmony, measure.harmonyFunction)
     return {
       phraseSection: measure.phraseSection,
-      events: applyPhraseToMeasure({
-        section: measure.phraseSection,
-        sourceEvents: measure.events,
-        theory: plan.theory,
+      harmonyFunction: measure.harmonyFunction,
+      events: alignEventsToHarmony({
+        events: phraseEvents,
+        harmonyTargets,
         cadenceTone: plan.phrase.cadenceTone,
-        repetitionSource,
+        section: measure.phraseSection,
       }),
     }
   })
@@ -359,22 +421,26 @@ function runPrototypeTests() {
   expect('phrase brain marks opening first', phrasePlan.sections[0] === 'opening')
   expect('phrase brain marks cadence last', phrasePlan.sections[2] === 'cadence')
 
+  const harmonyPlan = buildHarmonyBrain({ theory: buildTheoryContext('Write a melody in G major'), phrase: phrasePlan, bars: 3 })
+  expect('harmony brain opens on tonic function', harmonyPlan.functions[0] === 'tonic')
+  expect('harmony brain ends on cadential function', harmonyPlan.functions[2] === 'cadential')
+
   const score = compositionPlanToScore(
     assembleCompositionPlan({
       prompt: 'Write an arch stepwise melody in G major with quarter notes in 4/4',
       timeSignature: { numerator: 4, denominator: 4 },
-      bars: 2,
+      bars: 3,
       selectedPitchPreset: 'none',
       selectedRhythmPreset: 'none',
       generatedPitchPreset: [],
       generatedRhythmPreset: [],
     }),
     { numerator: 4, denominator: 4 },
-    2,
+    3,
   )
-  expect('score builds two measures', score.measures.length === 2)
-  expect('score fills measure with quarter notes', score.measures[0].events.length === 4)
-  expect('cadence measure ends on tonic', score.measures[1].events[score.measures[1].events.length - 1].pitch === 'G4')
+  expect('score builds three measures', score.measures.length === 3)
+  expect('opening measure uses tonic harmony', score.measures[0].harmonyFunction === 'tonic')
+  expect('cadence measure ends on tonic', score.measures[2].events[score.measures[2].events.length - 1].pitch === 'G4')
 
   return results
 }
@@ -409,7 +475,7 @@ function SectionCard(props: { title: string; children: React.ReactNode }) {
 
 export default function App() {
   const [prompt, setPrompt] = useState('Write an arch stepwise melody in G major with quarter notes in 4/4')
-  const [bars, setBars] = useState(2)
+  const [bars, setBars] = useState(3)
   const [tempo, setTempo] = useState(92)
   const [selectedPitchPreset, setSelectedPitchPreset] = useState('none')
   const [selectedRhythmPreset, setSelectedRhythmPreset] = useState('quarterStraight')
@@ -480,7 +546,7 @@ export default function App() {
               {musicModel.measures.map((measure, index) => (
                 <div key={index} style={{ border: '1px solid #ddd', borderRadius: 12, padding: 12, background: '#fafafa' }}>
                   <div style={{ fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#666', marginBottom: 8 }}>
-                    Measure {index + 1} · {measure.phraseSection}
+                    Measure {index + 1} · {measure.phraseSection} · {measure.harmonyFunction}
                   </div>
                   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                     {measure.events.map((event, eventIndex) => (
@@ -564,6 +630,10 @@ export default function App() {
             <div>Phrase sections: {compositionPlan.phrase.sections.join(' · ')}</div>
             <div>Cadence tone: {compositionPlan.phrase.cadenceTone}</div>
             <div>Repetition span: {compositionPlan.phrase.repetitionSpan}</div>
+            <div>Harmony functions: {compositionPlan.harmony.functions.join(' · ')}</div>
+            <div>Tonic targets: {compositionPlan.harmony.tonicTargets.join(' · ')}</div>
+            <div>Dominant targets: {compositionPlan.harmony.dominantTargets.join(' · ')}</div>
+            <div>Cadence targets: {compositionPlan.harmony.cadenceTargets.join(' · ')}</div>
           </SectionCard>
 
           <SectionCard title="Prototype Checks">
