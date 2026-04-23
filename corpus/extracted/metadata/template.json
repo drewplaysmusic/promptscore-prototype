@@ -2,8 +2,18 @@
   "id": "template",
   "title": "",
   "composer": "",
+  "composer_reference": "",
   "era": "",
   "genre": "",
+  "style_stack": [],
+  "style_traits": {
+    "tonality": "",
+    "phrase_symmetry": "",
+    "motif_repetition": "",
+    "syncopation_level": "",
+    "harmonic_clarity": "",
+    "ornament_density": ""
+  },
   "instrumentation": [],
   "key": "",
   "mode": "",
