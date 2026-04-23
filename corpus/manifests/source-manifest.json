@@ -3,8 +3,10 @@
     "id": "bach_chorale_001",
     "title": "Chorale 001",
     "composer": "J.S. Bach",
+    "composer_reference": "J.S. Bach",
     "era": "Baroque",
     "category": "chorale",
+    "style_stack": ["Baroque", "chorale", "functional_harmony", "low_syncopation"],
     "planned_format": "musicxml",
     "status": "planned",
     "source_note": "public domain symbolic source"
@@ -13,8 +15,10 @@
     "id": "mozart_theme_001",
     "title": "Classical Theme 001",
     "composer": "W.A. Mozart",
+    "composer_reference": "W.A. Mozart",
     "era": "Classical",
     "category": "theme",
+    "style_stack": ["Classical", "theme", "phrase_symmetry", "clear_cadence"],
     "planned_format": "musicxml",
     "status": "planned",
     "source_note": "public domain symbolic source"
@@ -23,8 +27,10 @@
     "id": "hymn_001",
     "title": "Hymn 001",
     "composer": "Traditional",
+    "composer_reference": "Traditional",
     "era": "Common Practice",
     "category": "hymn",
+    "style_stack": ["Common_Practice", "hymn", "simple_rhythm", "clear_harmony"],
     "planned_format": "musicxml",
     "status": "planned",
     "source_note": "public domain symbolic source"
