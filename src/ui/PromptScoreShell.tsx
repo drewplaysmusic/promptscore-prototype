@@ -191,8 +191,7 @@ export default function PromptScoreShell() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ fontSize: 18, fontWeight: 800 }}>PromptScore</div>
-          <nav style={{ display: 'flex', gap: 10, color: '#52525b', fontSize: 14 }}>
+<div style={{ fontSize: 18, fontWeight: 800, color: 'red' }}>PROMPTSCORE NEW SHELL TEST</div>          <nav style={{ display: 'flex', gap: 10, color: '#52525b', fontSize: 14 }}>
             <span>File</span>
             <span>Edit</span>
             <span>View</span>
