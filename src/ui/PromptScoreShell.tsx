@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
 
 type WorkspaceMode = 'compose' | 'learn' | 'brain' | 'playback'
+type DurationValue = 'Whole' | 'Half' | 'Quarter' | 'Eighth' | '16th'
+type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
 
 type PaletteItem = {
   label: string
@@ -140,14 +142,15 @@ function PanelCard(props: { title: string; children: React.ReactNode }) {
   )
 }
 
-function PaletteButton(props: { item: PaletteItem }) {
+function PaletteButton(props: { item: PaletteItem; isActive?: boolean; onClick?: () => void }) {
   return (
     <button
       type="button"
+      onClick={props.onClick}
       style={{
-        border: '1px solid #d4d4d8',
+        border: props.isActive ? '1px solid #111827' : '1px solid #d4d4d8',
         borderRadius: 10,
-        background: '#fafafa',
+        background: props.isActive ? '#e5e7eb' : '#fafafa',
         color: '#111827',
         padding: '10px 12px',
         textAlign: 'left',
@@ -167,6 +170,33 @@ function PaletteButton(props: { item: PaletteItem }) {
 
 export default function PromptScoreShell() {
   const [mode, setMode] = useState<WorkspaceMode>('compose')
+  const [selectedDuration, setSelectedDuration] = useState<DurationValue>('Quarter')
+  const [selectedAccidental, setSelectedAccidental] = useState<AccidentalValue>(null)
+  const [restMode, setRestMode] = useState(false)
+
+  function handleComposePaletteClick(item: PaletteItem) {
+    if (item.label === 'Whole' || item.label === 'Half' || item.label === 'Quarter' || item.label === 'Eighth' || item.label === '16th') {
+      setSelectedDuration(item.label)
+      setRestMode(false)
+      return
+    }
+
+    if (item.label === 'Rest') {
+      setRestMode((current) => !current)
+      return
+    }
+
+    if (item.label === 'Sharp' || item.label === 'Flat' || item.label === 'Natural') {
+      setSelectedAccidental((current) => (current === item.label ? null : item.label))
+    }
+  }
+
+  function isComposeItemActive(item: PaletteItem): boolean {
+    if (item.label === selectedDuration) return true
+    if (item.label === 'Rest' && restMode) return true
+    if (selectedAccidental && item.label === selectedAccidental) return true
+    return false
+  }
 
   return (
     <div
@@ -191,7 +221,8 @@ export default function PromptScoreShell() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-<div style={{ fontSize: 18, fontWeight: 800, color: 'red' }}>PROMPTSCORE NEW SHELL TEST</div>          <nav style={{ display: 'flex', gap: 10, color: '#52525b', fontSize: 14 }}>
+          <div style={{ fontSize: 18, fontWeight: 800 }}>PromptScore</div>
+          <nav style={{ display: 'flex', gap: 10, color: '#52525b', fontSize: 14 }}>
             <span>File</span>
             <span>Edit</span>
             <span>View</span>
@@ -236,7 +267,12 @@ export default function PromptScoreShell() {
           {PALETTE_BY_MODE[mode].map((group) => (
             <PanelCard key={group.title} title={group.title}>
               {group.items.map((item) => (
-                <PaletteButton key={item.label} item={item} />
+                <PaletteButton
+                  key={item.label}
+                  item={item}
+                  isActive={mode === 'compose' ? isComposeItemActive(item) : false}
+                  onClick={mode === 'compose' ? () => handleComposePaletteClick(item) : undefined}
+                />
               ))}
             </PanelCard>
           ))}
@@ -249,7 +285,7 @@ export default function PromptScoreShell() {
             background: '#ffffff',
             padding: 18,
             display: 'grid',
-            gridTemplateRows: 'auto 1fr',
+            gridTemplateRows: 'auto auto 1fr',
             gap: 16,
           }}
         >
@@ -275,6 +311,20 @@ export default function PromptScoreShell() {
             </button>
           </div>
 
+          {mode === 'compose' ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>
+                Duration: <strong>{selectedDuration}</strong>
+              </div>
+              <div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>
+                Accidental: <strong>{selectedAccidental || 'None'}</strong>
+              </div>
+              <div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: restMode ? '#111827' : '#fafafa', color: restMode ? '#ffffff' : '#111827', padding: '8px 12px', fontSize: 14 }}>
+                Rest mode: <strong>{restMode ? 'On' : 'Off'}</strong>
+              </div>
+            </div>
+          ) : null}
+
           <div
             style={{
               border: '1px dashed #cbd5e1',
@@ -285,11 +335,17 @@ export default function PromptScoreShell() {
               minHeight: 420,
             }}
           >
-            <div style={{ textAlign: 'center', maxWidth: 480 }}>
+            <div style={{ textAlign: 'center', maxWidth: 520 }}>
               <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Score Canvas</div>
               <div style={{ color: '#52525b', lineHeight: 1.5 }}>
                 This central area becomes the notation surface, exercise view, Brain mode candidate area, or playback-follow score depending on the active workspace.
               </div>
+              {mode === 'compose' ? (
+                <div style={{ marginTop: 18, color: '#111827', fontSize: 14 }}>
+                  Current entry will place a <strong>{restMode ? 'rest' : selectedDuration.toLowerCase() + ' note'}</strong>
+                  {restMode ? '' : selectedAccidental ? ` with ${selectedAccidental.toLowerCase()}` : ''}.
+                </div>
+              ) : null}
             </div>
           </div>
         </section>
@@ -311,6 +367,13 @@ export default function PromptScoreShell() {
             <div>Document: Untitled Score</div>
             <div>Meter: 4/4</div>
             <div>Key: C major</div>
+            {mode === 'compose' ? (
+              <>
+                <div>Selected Duration: {selectedDuration}</div>
+                <div>Selected Accidental: {selectedAccidental || 'None'}</div>
+                <div>Rest Mode: {restMode ? 'On' : 'Off'}</div>
+              </>
+            ) : null}
           </PanelCard>
         </aside>
       </main>
