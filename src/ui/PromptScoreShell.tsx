@@ -173,7 +173,13 @@ export default function PromptScoreShell() {
   const [selectedDuration, setSelectedDuration] = useState<DurationValue>('Quarter')
   const [selectedAccidental, setSelectedAccidental] = useState<AccidentalValue>(null)
   const [restMode, setRestMode] = useState(false)
+type NoteEvent = {
+  duration: DurationValue
+  accidental: AccidentalValue
+  isRest: boolean
+}
 
+const [notes, setNotes] = useState<NoteEvent[]>([])
   function handleComposePaletteClick(item: PaletteItem) {
     if (item.label === 'Whole' || item.label === 'Half' || item.label === 'Quarter' || item.label === 'Eighth' || item.label === '16th') {
       setSelectedDuration(item.label)
