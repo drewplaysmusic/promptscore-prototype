@@ -208,16 +208,17 @@ const [notes, setNotes] = useState<NoteEvent[]>([])
 }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: '#f4f4f5',
-        color: '#111827',
-        fontFamily: 'Inter, Arial, sans-serif',
-        display: 'grid',
-        gridTemplateRows: '64px 1fr 60px',
-      }}
-    >
+   <div
+  onClick={mode === 'compose' ? handleCanvasClick : undefined}
+  style={{
+    border: '1px dashed #cbd5e1',
+    borderRadius: 14,
+    background: 'linear-gradient(180deg, #ffffff 0%, #fafafa 100%)',
+    display: 'grid',
+    placeItems: 'center',
+    minHeight: 420,
+  }}
+>
       <header
         style={{
           borderBottom: '1px solid #e4e4e7',
@@ -346,20 +347,28 @@ const [notes, setNotes] = useState<NoteEvent[]>([])
   }}
 >
             <div style={{ textAlign: 'center', maxWidth: 520 }}>
-              <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Score Canvas</div>
-              <div style={{ color: '#52525b', lineHeight: 1.5 }}>
-                This central area becomes the notation surface, exercise view, Brain mode candidate area, or playback-follow score depending on the active workspace.
-              </div>
-              {mode === 'compose' ? (
-                <div style={{ marginTop: 18, color: '#111827', fontSize: 14 }}>
-                  Current entry will place a <strong>{restMode ? 'rest' : selectedDuration.toLowerCase() + ' note'}</strong>
-                  {restMode ? '' : selectedAccidental ? ` with ${selectedAccidental.toLowerCase()}` : ''}.
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </section>
+  <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Score Canvas</div>
+  <div style={{ color: '#52525b', lineHeight: 1.5 }}>
+    This central area becomes the notation surface, exercise view, Brain mode candidate area, or playback-follow score depending on the active workspace.
+  </div>
+  {mode === 'compose' ? (
+    <div style={{ marginTop: 18, color: '#111827', fontSize: 14 }}>
+      Current entry will place a <strong>{restMode ? 'rest' : selectedDuration.toLowerCase() + ' note'}</strong>
+      {restMode ? '' : selectedAccidental ? ` with ${selectedAccidental.toLowerCase()}` : ''}.
+    </div>
+  ) : null}
 
+  {notes.length > 0 && (
+    <div style={{ marginTop: 20, fontSize: 14 }}>
+      {notes.map((note, i) => (
+        <div key={i}>
+          {note.isRest ? 'Rest' : note.duration}
+          {note.accidental ? ` (${note.accidental})` : ''}
+        </div>
+      ))}
+    </div>
+  )}
+</div>
         <aside style={{ display: 'grid', gap: 12 }}>
           <PanelCard title="Inspector">
             {INSPECTOR_BY_MODE[mode].map((item) => (
