@@ -1,0 +1,17 @@
+{
+  "style_name": "Bach Chorale",
+  "era": "Baroque",
+  "genre": "chorale",
+  "composer_reference": "J.S. Bach",
+  "traits": {
+    "tonality": "functional_tonal",
+    "phrase_symmetry": "moderate",
+    "motif_repetition": "medium",
+    "syncopation_level": "low",
+    "harmonic_clarity": "high",
+    "ornament_density": "low",
+    "rhythmic_freedom": "low",
+    "density": "balanced",
+    "expression_level": "moderate"
+  }
+}
