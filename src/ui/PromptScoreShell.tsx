@@ -167,7 +167,21 @@ function PaletteButton(props: { item: PaletteItem; isActive?: boolean; onClick?:
     </button>
   )
 }
+function getDurationGlyph(duration: DurationValue): string {
+  if (duration === 'Whole') return '𝅝'
+  if (duration === 'Half') return '𝅗𝅥'
+  if (duration === 'Quarter') return '♩'
+  if (duration === 'Eighth') return '♪'
+  return '♬'
+}
 
+function getDurationWidth(duration: DurationValue): number {
+  if (duration === 'Whole') return 88
+  if (duration === 'Half') return 72
+  if (duration === 'Quarter') return 56
+  if (duration === 'Eighth') return 46
+  return 40
+}
 export default function PromptScoreShell() {
   const [mode, setMode] = useState<WorkspaceMode>('compose')
   const [selectedDuration, setSelectedDuration] = useState<DurationValue>('Quarter')
@@ -359,15 +373,44 @@ const [notes, setNotes] = useState<NoteEvent[]>([])
   ) : null}
 
   {notes.length > 0 && (
-    <div style={{ marginTop: 20, fontSize: 14 }}>
-      {notes.map((note, i) => (
-        <div key={i}>
-          {note.isRest ? 'Rest' : note.duration}
-          {note.accidental ? ` (${note.accidental})` : ''}
+  <div
+    style={{
+      marginTop: 24,
+      display: 'flex',
+      alignItems: 'end',
+      gap: 10,
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+    }}
+  >
+    {notes.map((note, i) => (
+      <div
+        key={i}
+        style={{
+          width: getDurationWidth(note.duration),
+          minHeight: 72,
+          border: '1px solid #d4d4d8',
+          borderRadius: 12,
+          background: note.isRest ? '#f3f4f6' : '#ffffff',
+          display: 'grid',
+          placeItems: 'center',
+          padding: 8,
+        }}
+      >
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 28, lineHeight: 1 }}>
+            {note.isRest ? '𝄽' : getDurationGlyph(note.duration)}
+          </div>
+          {!note.isRest && note.accidental ? (
+            <div style={{ fontSize: 14, marginTop: 6 }}>
+              {note.accidental === 'Sharp' ? '♯' : note.accidental === 'Flat' ? '♭' : '♮'}
+            </div>
+          ) : null}
         </div>
-      ))}
-    </div>
-  )}
+      </div>
+    ))}
+  </div>
+)}
 </div>
         <aside style={{ display: 'grid', gap: 12 }}>
           <PanelCard title="Inspector">
