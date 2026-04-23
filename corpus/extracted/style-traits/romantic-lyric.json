@@ -1,0 +1,17 @@
+{
+  "style_name": "Romantic Lyric",
+  "era": "Romantic",
+  "genre": "lyric phrase",
+  "composer_reference": "Romantic era",
+  "traits": {
+    "tonality": "expanded_tonal",
+    "phrase_symmetry": "flexible",
+    "motif_repetition": "moderate",
+    "syncopation_level": "moderate",
+    "harmonic_clarity": "rich",
+    "ornament_density": "moderate",
+    "rhythmic_freedom": "high",
+    "density": "expressive",
+    "expression_level": "high"
+  }
+}
