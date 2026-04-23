@@ -1,0 +1,17 @@
+{
+  "style_name": "Mozart Classical Phrase",
+  "era": "Classical",
+  "genre": "theme",
+  "composer_reference": "W.A. Mozart",
+  "traits": {
+    "tonality": "functional_tonal",
+    "phrase_symmetry": "high",
+    "motif_repetition": "high",
+    "syncopation_level": "low",
+    "harmonic_clarity": "high",
+    "ornament_density": "low",
+    "rhythmic_freedom": "moderate",
+    "density": "balanced",
+    "expression_level": "controlled"
+  }
+}
