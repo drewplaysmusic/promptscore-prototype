@@ -306,6 +306,37 @@ function fillMeasureWithDurations(measureBeats: number, durations: string[]): st
     if (durations.length === 0) break
   }
   return values.length ? values : ['quarter']
+}function getPhraseAwareDurations(
+  section: PhraseSection,
+  family: RhythmFamily,
+  density: RhythmDensity,
+  allowedDurations: string[]
+): string[] {
+  const longToShort = [...allowedDurations].sort(
+    (a, b) => getBeatsForDuration(b) - getBeatsForDuration(a)
+  )
+
+  const shortToLong = [...allowedDurations].sort(
+    (a, b) => getBeatsForDuration(a) - getBeatsForDuration(b)
+  )
+
+  if (section === 'cadence') {
+    const longer = longToShort.filter(d => getBeatsForDuration(d) >= 1)
+    return longer.length ? longer : longToShort
+  }
+
+  if (section === 'opening') {
+    if (density === 'busy') return shortToLong.slice(0, 3)
+    return longToShort.slice(0, 3)
+  }
+
+  if (section === 'middle') {
+    if (family === 'tuplet') return shortToLong
+    if (density === 'busy') return shortToLong
+    return allowedDurations
+  }
+
+  return allowedDurations
 }
 
 function buildRhythmBrain(args: { prompt: string; measureBeats: number; generatedRhythmPreset: string[]; selectedRhythmPreset: string }): RhythmPlan {
@@ -423,8 +454,32 @@ function compositionPlanToScore(plan: CompositionPlan, timeSignature: TimeSignat
     let used = 0
     const events: ScoreEvent[] = []
     while (used < beatsPerBar - 1e-9) {
-      const duration = plan.rhythm.values[rhythmIndex % plan.rhythm.values.length] || 'quarter'
-      const beats = getBeatsForDuration(duration)
+const phraseSection = plan.phrase.sections[bar] || 'middle'
+
+const rhythmChoices = getPhraseAwareDurations(
+  phraseSection,
+  plan.rhythm.family,
+  plan.rhythm.density,
+  plan.rhythm.allowedDurations
+)
+
+const rhythmValues = fillMeasureWithDurations(beatsPerBar, rhythmChoices)
+
+for (const duration of rhythmValues) {
+  const beats = getBeatsForDuration(duration)
+  if (used + beats > beatsPerBar) continue
+
+  const pitch = plan.melody.pitches[pitchIndex % plan.melody.pitches.length]
+
+  events.push({
+    pitch,
+    duration,
+    isRest: false
+  })
+
+  used += beats
+  pitchIndex++
+}      const beats = getBeatsForDuration(duration)
       if (used + beats > beatsPerBar + 1e-9) break
       const pitch = plan.melody.pitches[pitchIndex % plan.melody.pitches.length] || 'C3'
       events.push({ pitch, duration, isRest: false })
