@@ -197,12 +197,15 @@ const [notes, setNotes] = useState<NoteEvent[]>([])
     }
   }
 
-  function isComposeItemActive(item: PaletteItem): boolean {
-    if (item.label === selectedDuration) return true
-    if (item.label === 'Rest' && restMode) return true
-    if (selectedAccidental && item.label === selectedAccidental) return true
-    return false
+  function handleCanvasClick() {
+  const newNote: NoteEvent = {
+    duration: selectedDuration,
+    accidental: selectedAccidental,
+    isRest: restMode,
   }
+
+  setNotes((prev) => [...prev, newNote])
+}
 
   return (
     <div
