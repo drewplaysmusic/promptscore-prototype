@@ -1,0 +1,27 @@
+{
+  "id": "template",
+  "pitch": {
+    "range_low": "",
+    "range_high": "",
+    "interval_profile": {},
+    "contour_summary": ""
+  },
+  "rhythm": {
+    "duration_vocabulary": [],
+    "subdivision_family": "",
+    "density_summary": ""
+  },
+  "phrase": {
+    "phrase_lengths": [],
+    "cadence_locations": [],
+    "section_tags": []
+  },
+  "harmony": {
+    "function_profile": [],
+    "cadence_types": []
+  },
+  "motif": {
+    "motif_fingerprints": [],
+    "sequence_tags": []
+  }
+}
