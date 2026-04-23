@@ -331,16 +331,17 @@ const [notes, setNotes] = useState<NoteEvent[]>([])
             </div>
           ) : null}
 
-          <div
-            style={{
-              border: '1px dashed #cbd5e1',
-              borderRadius: 14,
-              background: 'linear-gradient(180deg, #ffffff 0%, #fafafa 100%)',
-              display: 'grid',
-              placeItems: 'center',
-              minHeight: 420,
-            }}
-          >
+         <div
+  onClick={mode === 'compose' ? handleCanvasClick : undefined}
+  style={{
+    border: '1px dashed #cbd5e1',
+    borderRadius: 14,
+    background: 'linear-gradient(180deg, #ffffff 0%, #fafafa 100%)',
+    display: 'grid',
+    placeItems: 'center',
+    minHeight: 420,
+  }}
+>
             <div style={{ textAlign: 'center', maxWidth: 520 }}>
               <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Score Canvas</div>
               <div style={{ color: '#52525b', lineHeight: 1.5 }}>
