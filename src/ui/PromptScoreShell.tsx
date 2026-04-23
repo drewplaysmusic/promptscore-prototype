@@ -2,9 +2,14 @@ import React, { useState } from 'react'
 
 type WorkspaceMode = 'compose' | 'learn' | 'brain' | 'playback'
 
+type PaletteItem = {
+  label: string
+  glyph?: string
+}
+
 type PaletteGroup = {
   title: string
-  items: string[]
+  items: PaletteItem[]
 }
 
 const MODE_LABELS: Record<WorkspaceMode, string> = {
@@ -16,21 +21,104 @@ const MODE_LABELS: Record<WorkspaceMode, string> = {
 
 const PALETTE_BY_MODE: Record<WorkspaceMode, PaletteGroup[]> = {
   compose: [
-    { title: 'Rhythm', items: ['Whole', 'Half', 'Quarter', 'Eighth', '16th', 'Rest'] },
-    { title: 'Pitch', items: ['Sharp', 'Flat', 'Natural', 'Tie', 'Slur', 'Dot'] },
-    { title: 'Expression', items: ['p', 'mf', 'f', 'Accent', 'Staccato', 'Tenuto'] },
+    {
+      title: 'Rhythm',
+      items: [
+        { label: 'Whole', glyph: '𝅝' },
+        { label: 'Half', glyph: '𝅗𝅥' },
+        { label: 'Quarter', glyph: '♩' },
+        { label: 'Eighth', glyph: '♪' },
+        { label: '16th', glyph: '♬' },
+        { label: 'Rest', glyph: '𝄽' },
+      ],
+    },
+    {
+      title: 'Pitch',
+      items: [
+        { label: 'Sharp', glyph: '♯' },
+        { label: 'Flat', glyph: '♭' },
+        { label: 'Natural', glyph: '♮' },
+        { label: 'Tie', glyph: '‿' },
+        { label: 'Slur', glyph: '⌒' },
+        { label: 'Dot', glyph: '•' },
+      ],
+    },
+    {
+      title: 'Expression',
+      items: [
+        { label: 'Piano', glyph: 'p' },
+        { label: 'Mezzo Forte', glyph: 'mf' },
+        { label: 'Forte', glyph: 'f' },
+        { label: 'Accent', glyph: '>' },
+        { label: 'Staccato', glyph: '•' },
+        { label: 'Tenuto', glyph: '–' },
+      ],
+    },
   ],
   learn: [
-    { title: 'Lesson Tools', items: ['Quarter', 'Eighth', 'Rest', 'Clap', 'Count', 'Hint'] },
-    { title: 'Focus', items: ['Pitch', 'Rhythm', 'Meter', 'Dynamics'] },
+    {
+      title: 'Lesson Tools',
+      items: [
+        { label: 'Quarter', glyph: '♩' },
+        { label: 'Eighth', glyph: '♪' },
+        { label: 'Rest', glyph: '𝄽' },
+        { label: 'Clap', glyph: '✋' },
+        { label: 'Count', glyph: '1&' },
+        { label: 'Hint', glyph: '?' },
+      ],
+    },
+    {
+      title: 'Focus',
+      items: [
+        { label: 'Pitch', glyph: '♯' },
+        { label: 'Rhythm', glyph: '♩' },
+        { label: 'Meter', glyph: '4/4' },
+        { label: 'Dynamics', glyph: 'mf' },
+      ],
+    },
   ],
   brain: [
-    { title: 'Generate', items: ['Prompt', 'Regenerate', 'Compare', 'References'] },
-    { title: 'Brains', items: ['Pitch', 'Rhythm', 'Placement', 'Style', 'Motif', 'Eval'] },
+    {
+      title: 'Generate',
+      items: [
+        { label: 'Prompt', glyph: '✦' },
+        { label: 'Regenerate', glyph: '↻' },
+        { label: 'Compare', glyph: '⇄' },
+        { label: 'References', glyph: '☰' },
+      ],
+    },
+    {
+      title: 'Brains',
+      items: [
+        { label: 'Pitch', glyph: '♯' },
+        { label: 'Rhythm', glyph: '♩' },
+        { label: 'Placement', glyph: '⌁' },
+        { label: 'Style', glyph: '◌' },
+        { label: 'Motif', glyph: '⟲' },
+        { label: 'Eval', glyph: '✓' },
+      ],
+    },
   ],
   playback: [
-    { title: 'Playback', items: ['Play', 'Stop', 'Loop', 'Tempo', 'Metro'] },
-    { title: 'Sound', items: ['Piano', 'Strings', 'Winds', 'Percussion'] },
+    {
+      title: 'Playback',
+      items: [
+        { label: 'Play', glyph: '▶' },
+        { label: 'Stop', glyph: '■' },
+        { label: 'Loop', glyph: '↺' },
+        { label: 'Tempo', glyph: '♩=92' },
+        { label: 'Metro', glyph: '⏱' },
+      ],
+    },
+    {
+      title: 'Sound',
+      items: [
+        { label: 'Piano', glyph: '♬' },
+        { label: 'Strings', glyph: '𝄞' },
+        { label: 'Winds', glyph: '𝄢' },
+        { label: 'Percussion', glyph: '◼' },
+      ],
+    },
   ],
 }
 
@@ -52,7 +140,7 @@ function PanelCard(props: { title: string; children: React.ReactNode }) {
   )
 }
 
-function PaletteButton(props: { label: string }) {
+function PaletteButton(props: { item: PaletteItem }) {
   return (
     <button
       type="button"
@@ -65,9 +153,14 @@ function PaletteButton(props: { label: string }) {
         textAlign: 'left',
         fontSize: 14,
         cursor: 'pointer',
+        display: 'grid',
+        gridTemplateColumns: '28px 1fr',
+        alignItems: 'center',
+        gap: 10,
       }}
     >
-      {props.label}
+      <span style={{ fontSize: 20, lineHeight: 1, display: 'inline-flex', justifyContent: 'center' }}>{props.item.glyph || '•'}</span>
+      <span>{props.item.label}</span>
     </button>
   )
 }
@@ -144,7 +237,7 @@ export default function PromptScoreShell() {
           {PALETTE_BY_MODE[mode].map((group) => (
             <PanelCard key={group.title} title={group.title}>
               {group.items.map((item) => (
-                <PaletteButton key={item} label={item} />
+                <PaletteButton key={item.label} item={item} />
               ))}
             </PanelCard>
           ))}
