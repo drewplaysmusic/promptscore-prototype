@@ -1,0 +1,33 @@
+{
+  "eras": [
+    "Medieval",
+    "Renaissance",
+    "Baroque",
+    "Classical",
+    "Romantic",
+    "Modern",
+    "Contemporary"
+  ],
+  "genres": [
+    "chorale",
+    "theme",
+    "sonata",
+    "fugue",
+    "hymn",
+    "folk",
+    "etude",
+    "groove",
+    "song"
+  ],
+  "style_traits_axes": {
+    "tonality": ["functional_tonal", "expanded_tonal", "modal", "atonal"],
+    "phrase_symmetry": ["high", "moderate", "flexible"],
+    "motif_repetition": ["low", "medium", "high"],
+    "syncopation_level": ["low", "moderate", "high"],
+    "harmonic_clarity": ["low", "moderate", "high", "rich"],
+    "ornament_density": ["low", "moderate", "high"],
+    "rhythmic_freedom": ["low", "moderate", "high"],
+    "density": ["sparse", "balanced", "dense", "expressive"],
+    "expression_level": ["controlled", "moderate", "high"]
+  }
+}
