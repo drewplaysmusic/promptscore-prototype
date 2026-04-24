@@ -200,7 +200,13 @@ function PaletteButton(props: { item: PaletteItem; isActive?: boolean; onClick?:
     </button>
   )
 }
-
+function getDurationGlyph(duration: DurationValue): string {
+  if (duration === 'Whole') return '𝅝'
+  if (duration === 'Half') return '𝅗𝅥'
+  if (duration === 'Quarter') return '♩'
+  if (duration === 'Eighth') return '♪'
+  return '♬'
+}
 export default function PromptScoreShell() {
   const [mode, setMode] = useState<WorkspaceMode>('compose')
   const [selectedDuration, setSelectedDuration] = useState<DurationValue>('Quarter')
