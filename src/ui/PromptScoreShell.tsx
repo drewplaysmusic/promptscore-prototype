@@ -502,6 +502,11 @@ export default function PromptScoreShell() {
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 28, lineHeight: 1 }}>
               {note.isRest ? '𝄽' : getDurationGlyph(note.duration)}
+           {!note.isRest && note.accidental ? (
+  <div>
+    {note.accidental === 'Sharp' ? '♯' : note.accidental === 'Flat' ? '♭' : '♮'}
+  </div>
+) : null}
             </div>
             {!note.isRest && note.accidental ? (
               <div style={{ fontSize: 14, marginTop: 6 }}>
