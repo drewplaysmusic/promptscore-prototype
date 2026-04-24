@@ -434,16 +434,80 @@ export default function PromptScoreShell() {
               ) : null}
 
               {notes.length > 0 && (
-                <div
-                  style={{
-                    marginTop: 24,
-                    display: 'flex',
-                    alignItems: 'end',
-                    gap: 10,
-                    flexWrap: 'wrap',
-                    justifyContent: 'center',
-                  }}
-                >
+  <div
+    style={{
+      marginTop: 24,
+      position: 'relative',
+      width: '100%',
+      maxWidth: 640,
+      minHeight: 180,
+      display: 'grid',
+      placeItems: 'center',
+    }}
+  >
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        display: 'grid',
+        alignContent: 'center',
+        gap: 14,
+        pointerEvents: 'none',
+      }}
+    >
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div
+          key={i}
+          style={{
+            height: 1,
+            background: '#cbd5e1',
+            width: '100%',
+          }}
+        />
+      ))}
+    </div>
+
+    <div
+      style={{
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        padding: '24px 12px',
+      }}
+    >
+      {notes.map((note, i) => (
+        <div
+          key={i}
+          style={{
+            width: getDurationWidth(note.duration),
+            minHeight: 72,
+            border: '1px solid #d4d4d8',
+            borderRadius: 12,
+            background: note.isRest ? '#f3f4f6' : '#ffffff',
+            display: 'grid',
+            placeItems: 'center',
+            padding: 8,
+            zIndex: 1,
+          }}
+        >
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 28, lineHeight: 1 }}>
+              {note.isRest ? '𝄽' : getDurationGlyph(note.duration)}
+            </div>
+            {!note.isRest && note.accidental ? (
+              <div style={{ fontSize: 14, marginTop: 6 }}>
+                {note.accidental === 'Sharp' ? '♯' : note.accidental === 'Flat' ? '♭' : '♮'}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
                   {notes.map((note, i) => (
                     <div
                       key={i}
