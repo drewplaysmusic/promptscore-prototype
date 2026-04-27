@@ -1,0 +1,20 @@
+[
+  {
+    "step": "Check battery voltage",
+    "decision": "Is voltage below 12.2V?",
+    "yes": "Battery may be weak or discharged",
+    "no": "Continue to next diagnostic step"
+  },
+  {
+    "step": "Check fuel pressure",
+    "decision": "Is fuel pressure zero?",
+    "yes": "Fuel pump or fuel delivery issue",
+    "no": "Fuel system likely functioning"
+  },
+  {
+    "step": "Check spark",
+    "decision": "Is there spark?",
+    "yes": "Ignition system likely OK",
+    "no": "Ignition failure or coil issue"
+  }
+]
