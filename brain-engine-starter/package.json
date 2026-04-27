@@ -1,0 +1,9 @@
+{
+  "name": "brain-engine-starter",
+  "version": "1.0.0",
+  "main": "src/demo.js",
+  "scripts": {
+    "start": "node src/demo.js"
+  },
+  "dependencies": {}
+}
