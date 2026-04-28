@@ -10,6 +10,8 @@ type NoteEvent = {
   accidental: AccidentalValue
   isRest: boolean
   pitch: PitchValue
+  measure: number
+  beat: number
 }
 
 type PaletteItem = {
@@ -167,6 +169,14 @@ function getDurationWidth(duration: DurationValue): number {
   return 40
 }
 
+function getDurationBeats(duration: DurationValue): number {
+  if (duration === 'Whole') return 4
+  if (duration === 'Half') return 2
+  if (duration === 'Quarter') return 1
+  if (duration === 'Eighth') return 0.5
+  return 0.25
+}
+
 function getAccidentalGlyph(accidental: AccidentalValue): string {
   if (accidental === 'Sharp') return '♯'
   if (accidental === 'Flat') return '♭'
@@ -243,6 +253,8 @@ export default function PromptScoreShell() {
   const [restMode, setRestMode] = useState(false)
   const [selectedPitch, setSelectedPitch] = useState<PitchValue>('C')
   const [notes, setNotes] = useState<NoteEvent[]>([])
+  const [currentBeat, setCurrentBeat] = useState(1)
+  const [currentMeasure, setCurrentMeasure] = useState(1)
 
   function handleComposePaletteClick(item: PaletteItem) {
     if (
@@ -289,14 +301,27 @@ export default function PromptScoreShell() {
   }
 
   function handleCanvasClick() {
+    const durationBeats = getDurationBeats(selectedDuration)
+
     const newNote: NoteEvent = {
       duration: selectedDuration,
       accidental: selectedAccidental,
       isRest: restMode,
       pitch: selectedPitch,
+      measure: currentMeasure,
+      beat: currentBeat,
     }
 
     setNotes((prev) => [...prev, newNote])
+
+    const nextBeat = currentBeat + durationBeats
+
+    if (nextBeat >= 5) {
+      setCurrentMeasure((prev) => prev + 1)
+      setCurrentBeat(1)
+    } else {
+      setCurrentBeat(nextBeat)
+    }
   }
 
   return (
@@ -434,6 +459,9 @@ export default function PromptScoreShell() {
               <div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: restMode ? '#111827' : '#fafafa', color: restMode ? '#ffffff' : '#111827', padding: '8px 12px', fontSize: 14 }}>
                 Rest mode: <strong>{restMode ? 'On' : 'Off'}</strong>
               </div>
+              <div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>
+                Position: <strong>M{currentMeasure} B{currentBeat}</strong>
+              </div>
             </div>
           ) : null}
 
@@ -458,7 +486,7 @@ export default function PromptScoreShell() {
               {mode === 'compose' ? (
                 <div style={{ marginTop: 18, color: '#111827', fontSize: 14 }}>
                   Current entry will place a <strong>{restMode ? 'rest' : selectedPitch + ' ' + selectedDuration.toLowerCase() + ' note'}</strong>
-                  {restMode ? '' : selectedAccidental ? ` with ${selectedAccidental.toLowerCase()}` : ''}.
+                  {restMode ? '' : selectedAccidental ? ` with ${selectedAccidental.toLowerCase()}` : ''} at <strong>M{currentMeasure} B{currentBeat}</strong>.
                 </div>
               ) : null}
 
@@ -537,6 +565,10 @@ export default function PromptScoreShell() {
                           {!note.isRest ? (
                             <div style={{ fontSize: 11, marginTop: 4, color: '#71717a' }}>{note.pitch}</div>
                           ) : null}
+
+                          <div style={{ fontSize: 10, marginTop: 4, color: '#a1a1aa' }}>
+                            M{note.measure} B{note.beat}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -576,6 +608,8 @@ export default function PromptScoreShell() {
                 <div>Selected Pitch: {selectedPitch}</div>
                 <div>Selected Accidental: {selectedAccidental || 'None'}</div>
                 <div>Rest Mode: {restMode ? 'On' : 'Off'}</div>
+                <div>Current Measure: {currentMeasure}</div>
+                <div>Current Beat: {currentBeat}</div>
                 <div>Events: {notes.length}</div>
               </>
             ) : null}
