@@ -43,6 +43,18 @@ const PALETTE_BY_MODE: Record<WorkspaceMode, PaletteGroup[]> = {
       ],
     },
     {
+  title: 'Notes',
+  items: [
+    { label: 'C', glyph: 'C' },
+    { label: 'D', glyph: 'D' },
+    { label: 'E', glyph: 'E' },
+    { label: 'F', glyph: 'F' },
+    { label: 'G', glyph: 'G' },
+    { label: 'A', glyph: 'A' },
+    { label: 'B', glyph: 'B' },
+  ],
+},
+    {
       title: 'Pitch',
       items: [
         { label: 'Sharp', glyph: '♯' },
