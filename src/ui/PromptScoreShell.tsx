@@ -8,6 +8,7 @@ type NoteEvent = {
   duration: DurationValue
   accidental: AccidentalValue
   isRest: boolean
+  pitch: PitchValue
 }
 
 type PaletteItem = {
