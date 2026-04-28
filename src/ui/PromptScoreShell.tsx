@@ -221,7 +221,19 @@ function PaletteButton(props: { item: PaletteItem; isActive?: boolean; onClick?:
     </button>
   )
 }
+function getPitchOffset(pitch: PitchValue): number {
+  const offsets: Record<PitchValue, number> = {
+    C: 42,
+    D: 34,
+    E: 26,
+    F: 18,
+    G: 10,
+    A: 2,
+    B: -6,
+  }
 
+  return offsets[pitch]
+}
 export default function PromptScoreShell() {
   const [mode, setMode] = useState<WorkspaceMode>('compose')
   const [selectedDuration, setSelectedDuration] = useState<DurationValue>('Quarter')
