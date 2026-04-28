@@ -530,16 +530,18 @@ export default function PromptScoreShell() {
                     {notes.map((note, i) => (
                       <div
                         key={i}
-                        style={{
-                          width: getDurationWidth(note.duration),
-                          minHeight: 72,
-                          border: '1px solid #d4d4d8',
-                          borderRadius: 12,
-                          background: note.isRest ? '#f3f4f6' : '#ffffff',
-                          display: 'grid',
-                          placeItems: 'center',
-                          padding: 8,
-                          zIndex: 1,
+                       style={{
+  width: getDurationWidth(note.duration),
+  minHeight: 72,
+  border: '1px solid #d4d4d8',
+  borderRadius: 12,
+  background: note.isRest ? '#f3f4f6' : '#ffffff',
+  display: 'grid',
+  placeItems: 'center',
+  padding: 8,
+  zIndex: 1,
+  transform: note.isRest ? 'translateY(0px)' : `translateY(${getPitchOffset(note.pitch)}px)`,
+}}
                         }}
                       >
                         <div style={{ textAlign: 'center' }}>
