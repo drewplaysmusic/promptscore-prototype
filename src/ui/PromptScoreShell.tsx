@@ -215,8 +215,9 @@ export default function PromptScoreShell() {
   const [selectedDuration, setSelectedDuration] = useState<DurationValue>('Quarter')
   const [selectedAccidental, setSelectedAccidental] = useState<AccidentalValue>(null)
   const [restMode, setRestMode] = useState(false)
+  const [selectedPitch, setSelectedPitch] = useState<PitchValue>('C')
   const [notes, setNotes] = useState<NoteEvent[]>([])
-
+  
   function handleComposePaletteClick(item: PaletteItem) {
     if (
       item.label === 'Whole' ||
