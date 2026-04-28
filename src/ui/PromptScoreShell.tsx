@@ -1,3 +1,4 @@
+import ScoreRenderer from './ScoreRenderer'
 import React, { useState } from 'react'
 
 type WorkspaceMode = 'compose' | 'learn' | 'brain' | 'playback'
