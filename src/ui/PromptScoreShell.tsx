@@ -266,10 +266,12 @@ export default function PromptScoreShell() {
   }
 
   function isComposeItemActive(item: PaletteItem): boolean {
-    if (item.label === selectedDuration) return true
-    if (item.label === 'Rest' && restMode) return true
-    if (selectedAccidental && item.label === selectedAccidental) return true
-    return false
+  if (item.label === selectedPitch) return true
+  if (item.label === selectedDuration) return true
+  if (item.label === 'Rest' && restMode) return true
+  if (selectedAccidental && item.label === selectedAccidental) return true
+  return false
+}
   }
 
   function handleCanvasClick() {
