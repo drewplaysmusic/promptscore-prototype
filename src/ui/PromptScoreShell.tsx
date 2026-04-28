@@ -265,7 +265,7 @@ export default function PromptScoreShell() {
     }
   }
 
-  function isComposeItemActive(item: PaletteItem): boolean {
+  function isComposeItemActive(item: PaletteItem): boolean 
   if (item.label === selectedPitch) return true
   if (item.label === selectedDuration) return true
   if (item.label === 'Rest' && restMode) return true
