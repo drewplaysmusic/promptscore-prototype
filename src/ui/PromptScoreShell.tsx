@@ -3,6 +3,7 @@ import React, { useState } from 'react'
 type WorkspaceMode = 'compose' | 'learn' | 'brain' | 'playback'
 type DurationValue = 'Whole' | 'Half' | 'Quarter' | 'Eighth' | '16th'
 type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
+type PitchValue = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B'
 
 type NoteEvent = {
   duration: DurationValue
