@@ -250,10 +250,11 @@ export default function PromptScoreShell() {
 
   function handleCanvasClick() {
     const newNote: NoteEvent = {
-      duration: selectedDuration,
-      accidental: selectedAccidental,
-      isRest: restMode,
-    }
+  duration: selectedDuration,
+  accidental: selectedAccidental,
+  isRest: restMode,
+  pitch: selectedPitch,
+}
 
     setNotes((prev) => [...prev, newNote])
   }
