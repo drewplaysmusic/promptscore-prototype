@@ -231,6 +231,18 @@ export default function PromptScoreShell() {
   const [notes, setNotes] = useState<NoteEvent[]>([])
   
   function handleComposePaletteClick(item: PaletteItem) {
+  if (
+  item.label === 'C' ||
+  item.label === 'D' ||
+  item.label === 'E' ||
+  item.label === 'F' ||
+  item.label === 'G' ||
+  item.label === 'A' ||
+  item.label === 'B'
+) {
+  setSelectedPitch(item.label)
+  return
+}   
     if (
       item.label === 'Whole' ||
       item.label === 'Half' ||
