@@ -490,7 +490,7 @@ export default function PromptScoreShell() {
                   {restMode ? '' : selectedAccidental ? ` with ${selectedAccidental.toLowerCase()}` : ''} at <strong>M{currentMeasure} B{currentBeat}</strong>.
                 </div>
               ) : null}
-
+<ScoreRenderer notes={notes} />
               {notes.length > 0 && (
                 <div
                   style={{
