@@ -43,17 +43,17 @@ const PALETTE_BY_MODE: Record<WorkspaceMode, PaletteGroup[]> = {
       ],
     },
     {
-  title: 'Notes',
-  items: [
-    { label: 'C', glyph: 'C' },
-    { label: 'D', glyph: 'D' },
-    { label: 'E', glyph: 'E' },
-    { label: 'F', glyph: 'F' },
-    { label: 'G', glyph: 'G' },
-    { label: 'A', glyph: 'A' },
-    { label: 'B', glyph: 'B' },
-  ],
-},
+      title: 'Notes',
+      items: [
+        { label: 'C', glyph: 'C' },
+        { label: 'D', glyph: 'D' },
+        { label: 'E', glyph: 'E' },
+        { label: 'F', glyph: 'F' },
+        { label: 'G', glyph: 'G' },
+        { label: 'A', glyph: 'A' },
+        { label: 'B', glyph: 'B' },
+      ],
+    },
     {
       title: 'Pitch',
       items: [
@@ -174,6 +174,20 @@ function getAccidentalGlyph(accidental: AccidentalValue): string {
   return ''
 }
 
+function getPitchOffset(pitch: PitchValue): number {
+  const offsets: Record<PitchValue, number> = {
+    C: 42,
+    D: 34,
+    E: 26,
+    F: 18,
+    G: 10,
+    A: 2,
+    B: -6,
+  }
+
+  return offsets[pitch]
+}
+
 function PanelCard(props: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ border: '1px solid #d4d4d8', borderRadius: 12, background: '#ffffff', padding: 12 }}>
@@ -221,19 +235,7 @@ function PaletteButton(props: { item: PaletteItem; isActive?: boolean; onClick?:
     </button>
   )
 }
-function getPitchOffset(pitch: PitchValue): number {
-  const offsets: Record<PitchValue, number> = {
-    C: 42,
-    D: 34,
-    E: 26,
-    F: 18,
-    G: 10,
-    A: 2,
-    B: -6,
-  }
 
-  return offsets[pitch]
-}
 export default function PromptScoreShell() {
   const [mode, setMode] = useState<WorkspaceMode>('compose')
   const [selectedDuration, setSelectedDuration] = useState<DurationValue>('Quarter')
@@ -241,20 +243,21 @@ export default function PromptScoreShell() {
   const [restMode, setRestMode] = useState(false)
   const [selectedPitch, setSelectedPitch] = useState<PitchValue>('C')
   const [notes, setNotes] = useState<NoteEvent[]>([])
-  
+
   function handleComposePaletteClick(item: PaletteItem) {
-  if (
-  item.label === 'C' ||
-  item.label === 'D' ||
-  item.label === 'E' ||
-  item.label === 'F' ||
-  item.label === 'G' ||
-  item.label === 'A' ||
-  item.label === 'B'
-) {
-  setSelectedPitch(item.label)
-  return
-}   
+    if (
+      item.label === 'C' ||
+      item.label === 'D' ||
+      item.label === 'E' ||
+      item.label === 'F' ||
+      item.label === 'G' ||
+      item.label === 'A' ||
+      item.label === 'B'
+    ) {
+      setSelectedPitch(item.label)
+      return
+    }
+
     if (
       item.label === 'Whole' ||
       item.label === 'Half' ||
@@ -277,22 +280,21 @@ export default function PromptScoreShell() {
     }
   }
 
-  function isComposeItemActive(item: PaletteItem): boolean 
-  if (item.label === selectedPitch) return true
-  if (item.label === selectedDuration) return true
-  if (item.label === 'Rest' && restMode) return true
-  if (selectedAccidental && item.label === selectedAccidental) return true
-  return false
-}
+  function isComposeItemActive(item: PaletteItem): boolean {
+    if (item.label === selectedPitch) return true
+    if (item.label === selectedDuration) return true
+    if (item.label === 'Rest' && restMode) return true
+    if (selectedAccidental && item.label === selectedAccidental) return true
+    return false
   }
 
   function handleCanvasClick() {
     const newNote: NoteEvent = {
-  duration: selectedDuration,
-  accidental: selectedAccidental,
-  isRest: restMode,
-  pitch: selectedPitch,
-}
+      duration: selectedDuration,
+      accidental: selectedAccidental,
+      isRest: restMode,
+      pitch: selectedPitch,
+    }
 
     setNotes((prev) => [...prev, newNote])
   }
@@ -420,38 +422,16 @@ export default function PromptScoreShell() {
 
           {mode === 'compose' ? (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-              <div
-                style={{
-                  border: '1px solid #d4d4d8',
-                  borderRadius: 999,
-                  background: '#fafafa',
-                  padding: '8px 12px',
-                  fontSize: 14,
-                }}
-              >
+              <div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>
                 Duration: <strong>{selectedDuration}</strong>
               </div>
-              <div
-                style={{
-                  border: '1px solid #d4d4d8',
-                  borderRadius: 999,
-                  background: '#fafafa',
-                  padding: '8px 12px',
-                  fontSize: 14,
-                }}
-              >
+              <div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>
+                Pitch: <strong>{selectedPitch}</strong>
+              </div>
+              <div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>
                 Accidental: <strong>{selectedAccidental || 'None'}</strong>
               </div>
-              <div
-                style={{
-                  border: '1px solid #d4d4d8',
-                  borderRadius: 999,
-                  background: restMode ? '#111827' : '#fafafa',
-                  color: restMode ? '#ffffff' : '#111827',
-                  padding: '8px 12px',
-                  fontSize: 14,
-                }}
-              >
+              <div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: restMode ? '#111827' : '#fafafa', color: restMode ? '#ffffff' : '#111827', padding: '8px 12px', fontSize: 14 }}>
                 Rest mode: <strong>{restMode ? 'On' : 'Off'}</strong>
               </div>
             </div>
@@ -477,7 +457,7 @@ export default function PromptScoreShell() {
 
               {mode === 'compose' ? (
                 <div style={{ marginTop: 18, color: '#111827', fontSize: 14 }}>
-                  Current entry will place a <strong>{restMode ? 'rest' : selectedDuration.toLowerCase() + ' note'}</strong>
+                  Current entry will place a <strong>{restMode ? 'rest' : selectedPitch + ' ' + selectedDuration.toLowerCase() + ' note'}</strong>
                   {restMode ? '' : selectedAccidental ? ` with ${selectedAccidental.toLowerCase()}` : ''}.
                 </div>
               ) : null}
@@ -530,18 +510,17 @@ export default function PromptScoreShell() {
                     {notes.map((note, i) => (
                       <div
                         key={i}
-                       style={{
-  width: getDurationWidth(note.duration),
-  minHeight: 72,
-  border: '1px solid #d4d4d8',
-  borderRadius: 12,
-  background: note.isRest ? '#f3f4f6' : '#ffffff',
-  display: 'grid',
-  placeItems: 'center',
-  padding: 8,
-  zIndex: 1,
-  transform: note.isRest ? 'translateY(0px)' : `translateY(${getPitchOffset(note.pitch)}px)`,
-}}
+                        style={{
+                          width: getDurationWidth(note.duration),
+                          minHeight: 72,
+                          border: '1px solid #d4d4d8',
+                          borderRadius: 12,
+                          background: note.isRest ? '#f3f4f6' : '#ffffff',
+                          display: 'grid',
+                          placeItems: 'center',
+                          padding: 8,
+                          zIndex: 1,
+                          transform: note.isRest ? 'translateY(0px)' : `translateY(${getPitchOffset(note.pitch)}px)`,
                         }}
                       >
                         <div style={{ textAlign: 'center' }}>
@@ -553,6 +532,10 @@ export default function PromptScoreShell() {
                             <div style={{ fontSize: 14, marginTop: 6 }}>
                               {getAccidentalGlyph(note.accidental)}
                             </div>
+                          ) : null}
+
+                          {!note.isRest ? (
+                            <div style={{ fontSize: 11, marginTop: 4, color: '#71717a' }}>{note.pitch}</div>
                           ) : null}
                         </div>
                       </div>
@@ -590,6 +573,7 @@ export default function PromptScoreShell() {
             {mode === 'compose' ? (
               <>
                 <div>Selected Duration: {selectedDuration}</div>
+                <div>Selected Pitch: {selectedPitch}</div>
                 <div>Selected Accidental: {selectedAccidental || 'None'}</div>
                 <div>Rest Mode: {restMode ? 'On' : 'Off'}</div>
                 <div>Events: {notes.length}</div>
