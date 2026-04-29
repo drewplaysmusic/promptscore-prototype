@@ -1,5 +1,5 @@
-import ScoreRenderer from './ScoreRenderer'
 import React, { useState } from 'react'
+import ScoreRenderer from './ScoreRenderer'
 
 type WorkspaceMode = 'compose' | 'learn' | 'brain' | 'playback'
 type DurationValue = 'Whole' | 'Half' | 'Quarter' | 'Eighth' | '16th'
@@ -199,6 +199,10 @@ function getPitchOffset(pitch: PitchValue): number {
   return offsets[pitch]
 }
 
+function isPitchValue(value: string): value is PitchValue {
+  return ['C', 'D', 'E', 'F', 'G', 'A', 'B'].includes(value)
+}
+
 function PanelCard(props: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ border: '1px solid #d4d4d8', borderRadius: 12, background: '#ffffff', padding: 12 }}>
@@ -256,17 +260,10 @@ export default function PromptScoreShell() {
   const [notes, setNotes] = useState<NoteEvent[]>([])
   const [currentBeat, setCurrentBeat] = useState(1)
   const [currentMeasure, setCurrentMeasure] = useState(1)
+  const [promptText, setPromptText] = useState('')
 
   function handleComposePaletteClick(item: PaletteItem) {
-    if (
-      item.label === 'C' ||
-      item.label === 'D' ||
-      item.label === 'E' ||
-      item.label === 'F' ||
-      item.label === 'G' ||
-      item.label === 'A' ||
-      item.label === 'B'
-    ) {
+    if (isPitchValue(item.label)) {
       setSelectedPitch(item.label)
       return
     }
@@ -323,6 +320,42 @@ export default function PromptScoreShell() {
     } else {
       setCurrentBeat(nextBeat)
     }
+  }
+
+  function handlePromptGenerate() {
+    const tokens = promptText.toUpperCase().split(/\s+/).filter(Boolean)
+    if (tokens.length === 0) return
+
+    const generatedNotes: NoteEvent[] = []
+    let measure = currentMeasure
+    let beat = currentBeat
+
+    tokens.forEach((token) => {
+      if (!isPitchValue(token)) return
+
+      generatedNotes.push({
+        duration: selectedDuration,
+        accidental: selectedAccidental,
+        isRest: false,
+        pitch: token,
+        measure,
+        beat,
+      })
+
+      beat += getDurationBeats(selectedDuration)
+
+      if (beat >= 5) {
+        measure += 1
+        beat = 1
+      }
+    })
+
+    if (generatedNotes.length === 0) return
+
+    setNotes((prev) => [...prev, ...generatedNotes])
+    setCurrentMeasure(measure)
+    setCurrentBeat(beat)
+    setPromptText('')
   }
 
   return (
@@ -416,7 +449,7 @@ export default function PromptScoreShell() {
             gap: 16,
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
             <div>
               <div
                 style={{
@@ -431,19 +464,36 @@ export default function PromptScoreShell() {
               </div>
               <div style={{ fontSize: 24, fontWeight: 800 }}>{MODE_LABELS[mode]} Mode</div>
             </div>
-            <button
-              type="button"
-              style={{
-                border: '1px solid #d4d4d8',
-                background: '#fafafa',
-                borderRadius: 10,
-                padding: '10px 14px',
-                fontSize: 14,
-                cursor: 'pointer',
-              }}
-            >
-              Prompt / Generate
-            </button>
+
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                value={promptText}
+                onChange={(event) => setPromptText(event.target.value)}
+                placeholder="Try: C D E F G"
+                style={{
+                  border: '1px solid #d4d4d8',
+                  borderRadius: 10,
+                  padding: '10px 12px',
+                  fontSize: 14,
+                  minWidth: 220,
+                }}
+              />
+              <button
+                type="button"
+                onClick={handlePromptGenerate}
+                style={{
+                  border: '1px solid #111827',
+                  background: '#111827',
+                  color: '#ffffff',
+                  borderRadius: 10,
+                  padding: '10px 14px',
+                  fontSize: 14,
+                  cursor: 'pointer',
+                }}
+              >
+                Generate
+              </button>
+            </div>
           </div>
 
           {mode === 'compose' ? (
@@ -490,7 +540,9 @@ export default function PromptScoreShell() {
                   {restMode ? '' : selectedAccidental ? ` with ${selectedAccidental.toLowerCase()}` : ''} at <strong>M{currentMeasure} B{currentBeat}</strong>.
                 </div>
               ) : null}
-<ScoreRenderer notes={notes} />
+
+              <ScoreRenderer notes={notes} />
+
               {notes.length > 0 && (
                 <div
                   style={{
