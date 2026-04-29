@@ -5,6 +5,7 @@ type WorkspaceMode = 'compose' | 'learn' | 'brain' | 'playback'
 type DurationValue = 'Whole' | 'Half' | 'Quarter' | 'Eighth' | '16th'
 type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
 type PitchValue = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B'
+type TimeSignatureValue = '4/4' | '3/4' | '2/4' | '6/8'
 
 type NoteEvent = {
   duration: DurationValue
@@ -31,6 +32,8 @@ const MODE_LABELS: Record<WorkspaceMode, string> = {
   brain: 'Brain',
   playback: 'Playback',
 }
+
+const TIME_SIGNATURES: TimeSignatureValue[] = ['4/4', '3/4', '2/4', '6/8']
 
 const PALETTE_BY_MODE: Record<WorkspaceMode, PaletteGroup[]> = {
   compose: [
@@ -178,6 +181,13 @@ function getDurationBeats(duration: DurationValue): number {
   return 0.25
 }
 
+function getMeasureBeats(timeSignature: TimeSignatureValue): number {
+  if (timeSignature === '3/4') return 3
+  if (timeSignature === '2/4') return 2
+  if (timeSignature === '6/8') return 3
+  return 4
+}
+
 function getAccidentalGlyph(accidental: AccidentalValue): string {
   if (accidental === 'Sharp') return '♯'
   if (accidental === 'Flat') return '♭'
@@ -201,6 +211,36 @@ function getPitchOffset(pitch: PitchValue): number {
 
 function isPitchValue(value: string): value is PitchValue {
   return ['C', 'D', 'E', 'F', 'G', 'A', 'B'].includes(value)
+}
+
+function placeEventAtCursor(
+  event: Omit<NoteEvent, 'measure' | 'beat'>,
+  cursor: { measure: number; beat: number },
+  timeSignature: TimeSignatureValue,
+): { note: NoteEvent; nextMeasure: number; nextBeat: number } {
+  const measureBeats = getMeasureBeats(timeSignature)
+  const durationBeats = getDurationBeats(event.duration)
+  let measure = cursor.measure
+  let beat = cursor.beat
+
+  if (beat + durationBeats > measureBeats + 1) {
+    measure += 1
+    beat = 1
+  }
+
+  const note: NoteEvent = {
+    ...event,
+    measure,
+    beat,
+  }
+
+  const nextBeat = beat + durationBeats
+
+  if (nextBeat >= measureBeats + 1) {
+    return { note, nextMeasure: measure + 1, nextBeat: 1 }
+  }
+
+  return { note, nextMeasure: measure, nextBeat }
 }
 
 function PanelCard(props: { title: string; children: React.ReactNode }) {
@@ -257,6 +297,7 @@ export default function PromptScoreShell() {
   const [selectedAccidental, setSelectedAccidental] = useState<AccidentalValue>(null)
   const [restMode, setRestMode] = useState(false)
   const [selectedPitch, setSelectedPitch] = useState<PitchValue>('C')
+  const [timeSignature, setTimeSignature] = useState<TimeSignatureValue>('4/4')
   const [notes, setNotes] = useState<NoteEvent[]>([])
   const [currentBeat, setCurrentBeat] = useState(1)
   const [currentMeasure, setCurrentMeasure] = useState(1)
@@ -299,27 +340,20 @@ export default function PromptScoreShell() {
   }
 
   function handleCanvasClick() {
-    const durationBeats = getDurationBeats(selectedDuration)
+    const placed = placeEventAtCursor(
+      {
+        duration: selectedDuration,
+        accidental: selectedAccidental,
+        isRest: restMode,
+        pitch: selectedPitch,
+      },
+      { measure: currentMeasure, beat: currentBeat },
+      timeSignature,
+    )
 
-    const newNote: NoteEvent = {
-      duration: selectedDuration,
-      accidental: selectedAccidental,
-      isRest: restMode,
-      pitch: selectedPitch,
-      measure: currentMeasure,
-      beat: currentBeat,
-    }
-
-    setNotes((prev) => [...prev, newNote])
-
-    const nextBeat = currentBeat + durationBeats
-
-    if (nextBeat >= 5) {
-      setCurrentMeasure((prev) => prev + 1)
-      setCurrentBeat(1)
-    } else {
-      setCurrentBeat(nextBeat)
-    }
+    setNotes((prev) => [...prev, placed.note])
+    setCurrentMeasure(placed.nextMeasure)
+    setCurrentBeat(placed.nextBeat)
   }
 
   function handlePromptGenerate() {
@@ -333,21 +367,20 @@ export default function PromptScoreShell() {
     tokens.forEach((token) => {
       if (!isPitchValue(token)) return
 
-      generatedNotes.push({
-        duration: selectedDuration,
-        accidental: selectedAccidental,
-        isRest: false,
-        pitch: token,
-        measure,
-        beat,
-      })
+      const placed = placeEventAtCursor(
+        {
+          duration: selectedDuration,
+          accidental: selectedAccidental,
+          isRest: false,
+          pitch: token,
+        },
+        { measure, beat },
+        timeSignature,
+      )
 
-      beat += getDurationBeats(selectedDuration)
-
-      if (beat >= 5) {
-        measure += 1
-        beat = 1
-      }
+      generatedNotes.push(placed.note)
+      measure = placed.nextMeasure
+      beat = placed.nextBeat
     })
 
     if (generatedNotes.length === 0) return
@@ -356,6 +389,13 @@ export default function PromptScoreShell() {
     setCurrentMeasure(measure)
     setCurrentBeat(beat)
     setPromptText('')
+  }
+
+  function handleTimeSignatureChange(nextTimeSignature: TimeSignatureValue) {
+    setTimeSignature(nextTimeSignature)
+    setNotes([])
+    setCurrentMeasure(1)
+    setCurrentBeat(1)
   }
 
   return (
@@ -513,6 +553,20 @@ export default function PromptScoreShell() {
               <div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>
                 Position: <strong>M{currentMeasure} B{currentBeat}</strong>
               </div>
+              <label style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>
+                Meter:{' '}
+                <select
+                  value={timeSignature}
+                  onChange={(event) => handleTimeSignatureChange(event.target.value as TimeSignatureValue)}
+                  style={{ border: 0, background: 'transparent', fontWeight: 700 }}
+                >
+                  {TIME_SIGNATURES.map((meter) => (
+                    <option key={meter} value={meter}>
+                      {meter}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           ) : null}
 
@@ -537,11 +591,11 @@ export default function PromptScoreShell() {
               {mode === 'compose' ? (
                 <div style={{ marginTop: 18, color: '#111827', fontSize: 14 }}>
                   Current entry will place a <strong>{restMode ? 'rest' : selectedPitch + ' ' + selectedDuration.toLowerCase() + ' note'}</strong>
-                  {restMode ? '' : selectedAccidental ? ` with ${selectedAccidental.toLowerCase()}` : ''} at <strong>M{currentMeasure} B{currentBeat}</strong>.
+                  {restMode ? '' : selectedAccidental ? ` with ${selectedAccidental.toLowerCase()}` : ''} at <strong>M{currentMeasure} B{currentBeat}</strong> in <strong>{timeSignature}</strong>.
                 </div>
               ) : null}
 
-              <ScoreRenderer notes={notes} />
+              <ScoreRenderer notes={notes} timeSignature={timeSignature} />
 
               {notes.length > 0 && (
                 <div
@@ -653,7 +707,7 @@ export default function PromptScoreShell() {
           <PanelCard title="Quick Status">
             <div>Mode: {MODE_LABELS[mode]}</div>
             <div>Document: Untitled Score</div>
-            <div>Meter: 4/4</div>
+            <div>Meter: {timeSignature}</div>
             <div>Key: C major</div>
             {mode === 'compose' ? (
               <>
