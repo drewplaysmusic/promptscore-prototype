@@ -7,6 +7,7 @@ type DurationValue = 'Whole' | 'Half' | 'Quarter' | 'Eighth' | '16th'
 type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
 type PitchValue = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B'
 type TimeSignatureValue = '4/4' | '3/4' | '2/4' | '6/8'
+type KeySignatureValue = 'C major' | 'G major' | 'F major' | 'D major' | 'A minor'
 
 type NoteEvent = {
   duration: DurationValue
@@ -251,6 +252,7 @@ export default function PromptScoreShell() {
   const [restMode, setRestMode] = useState(false)
   const [selectedPitch, setSelectedPitch] = useState<PitchValue>('C')
   const [timeSignature, setTimeSignature] = useState<TimeSignatureValue>('4/4')
+  const [keySignature, setKeySignature] = useState<KeySignatureValue>('C major')
   const [notes, setNotes] = useState<NoteEvent[]>([])
   const [currentBeat, setCurrentBeat] = useState(1)
   const [currentMeasure, setCurrentMeasure] = useState(1)
@@ -319,6 +321,7 @@ export default function PromptScoreShell() {
 
     setNotes(result.notes)
     setTimeSignature(result.timeSignature)
+    setKeySignature(result.keySignature)
     setCurrentMeasure(1)
     setCurrentBeat(1)
     setPromptText('')
@@ -530,7 +533,7 @@ export default function PromptScoreShell() {
                 </div>
               ) : null}
 
-              <ScoreRenderer notes={notes} timeSignature={timeSignature} />
+              <ScoreRenderer notes={notes} timeSignature={timeSignature} keySignature={keySignature} />
 
               {notes.length > 0 && (
                 <div
@@ -643,7 +646,7 @@ export default function PromptScoreShell() {
             <div>Mode: {MODE_LABELS[mode]}</div>
             <div>Document: Untitled Score</div>
             <div>Meter: {timeSignature}</div>
-            <div>Key: C major</div>
+            <div>Key: {keySignature}</div>
             {mode === 'compose' ? (
               <>
                 <div>Selected Duration: {selectedDuration}</div>
