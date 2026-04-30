@@ -147,9 +147,9 @@ function parseRhythmPattern(prompt: string, fallback: DurationValue, timeSignatu
 }
 
 function detectKey(prompt: string): KeySignatureValue {
-  if (prompt.includes('g major') || prompt.includes('key of g')) return 'G major'
-  if (prompt.includes('f major') || prompt.includes('key of f')) return 'F major'
-  if (prompt.includes('d major') || prompt.includes('key of d')) return 'D major'
+  if (prompt.includes('g major') || prompt.includes('key of g') || /\bin\s+g\b/.test(prompt)) return 'G major'
+  if (prompt.includes('f major') || prompt.includes('key of f') || /\bin\s+f\b/.test(prompt)) return 'F major'
+  if (prompt.includes('d major') || prompt.includes('key of d') || /\bin\s+d\b/.test(prompt)) return 'D major'
   if (prompt.includes('a minor') || prompt.includes('key of a minor')) return 'A minor'
   return 'C major'
 }
@@ -164,10 +164,26 @@ function detectMeasureCount(prompt: string): number {
 }
 
 function detectPhraseShape(prompt: string): PhraseShapeValue {
-  if (prompt.includes('question') || prompt.includes('answer')) return 'question answer'
+  if (prompt.includes('question') || prompt.includes('answer') || prompt.includes('natural phrase')) return 'question answer'
   if (prompt.includes('motif') || prompt.includes('sequence')) return 'motif sequence'
   if (prompt.includes('cadence') || prompt.includes('ending')) return 'cadence focus'
   return 'simple contour'
+}
+
+function shouldUseGeneratedMelody(prompt: string, explicitEvents: Omit<NoteEvent, 'measure' | 'beat'>[]): boolean {
+  if (explicitEvents.length === 0) return true
+  return (
+    prompt.includes('generate') ||
+    prompt.includes('write') ||
+    prompt.includes('melody') ||
+    prompt.includes('phrase') ||
+    prompt.includes('measure') ||
+    prompt.includes('bar') ||
+    prompt.includes('in c') ||
+    prompt.includes('in g') ||
+    prompt.includes('in f') ||
+    prompt.includes('in d')
+  )
 }
 
 function isPitchToken(token: string): token is PitchValue {
@@ -180,7 +196,10 @@ function extractExplicitEvents(prompt: string, duration: DurationValue, accident
   let activeAccidental = accidental
   let activeDuration = duration
 
-  tokens.forEach((token) => {
+  tokens.forEach((token, index) => {
+    const previousToken = tokens[index - 1]
+    if (previousToken === 'IN' || previousToken === 'KEY') return
+
     if (token === 'SHARP' || token === '#') {
       activeAccidental = 'Sharp'
       return
@@ -358,7 +377,7 @@ export function generateMusicBrainResult(promptText: string, defaults: BrainDefa
   const phraseShape = detectPhraseShape(normalizedPrompt)
   const rhythmPattern = parseRhythmPattern(normalizedPrompt, duration, timeSignature, phraseShape)
   const explicitEvents = extractExplicitEvents(promptText, duration, defaults.accidental)
-  const shouldGenerateMelody = explicitEvents.length === 0 || normalizedPrompt.includes('generate') || normalizedPrompt.includes('write') || normalizedPrompt.includes('melody')
+  const shouldGenerateMelody = shouldUseGeneratedMelody(normalizedPrompt, explicitEvents)
   const sourceEvents = shouldGenerateMelody
     ? buildBeginnerMelodyEvents(normalizedPrompt, keySignature, duration, timeSignature, measureCount, rhythmPattern, phraseShape)
     : explicitEvents
