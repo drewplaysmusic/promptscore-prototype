@@ -4,7 +4,17 @@ export type PitchValue = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B'
 export type TimeSignatureValue = '4/4' | '3/4' | '2/4' | '6/8'
 export type KeySignatureValue = 'C major' | 'G major' | 'F major' | 'D major' | 'A minor'
 type PhraseShapeValue = 'simple contour' | 'question answer' | 'motif sequence' | 'cadence focus'
-type StyleValue = 'plain' | 'bach' | 'country' | 'sad folk' | 'hymn' | 'march' | 'waltz'
+type StyleValue =
+  | 'plain'
+  | 'baroque'
+  | 'classical'
+  | 'romantic'
+  | 'renaissance'
+  | 'jazz'
+  | 'rock'
+  | 'modern'
+  | 'folk'
+  | 'country'
 
 export type NoteEvent = {
   duration: DurationValue
@@ -101,12 +111,15 @@ function getMeasureBeats(timeSignature: TimeSignatureValue): number {
 }
 
 function detectStyle(prompt: string): StyleValue {
-  if (prompt.includes('bach') || prompt.includes('baroque')) return 'bach'
+  if (prompt.includes('baroque') || prompt.includes('bach')) return 'baroque'
+  if (prompt.includes('classical') || prompt.includes('mozart')) return 'classical'
+  if (prompt.includes('romantic') || prompt.includes('chopin')) return 'romantic'
+  if (prompt.includes('renaissance')) return 'renaissance'
+  if (prompt.includes('jazz')) return 'jazz'
+  if (prompt.includes('rock')) return 'rock'
+  if (prompt.includes('modern')) return 'modern'
+  if (prompt.includes('folk') || prompt.includes('sad')) return 'folk'
   if (prompt.includes('country') || prompt.includes('western')) return 'country'
-  if (prompt.includes('sad') || prompt.includes('folk')) return 'sad folk'
-  if (prompt.includes('hymn') || prompt.includes('chorale')) return 'hymn'
-  if (prompt.includes('march')) return 'march'
-  if (prompt.includes('waltz')) return 'waltz'
   return 'plain'
 }
 
@@ -115,8 +128,6 @@ function detectTimeSignature(prompt: string, fallback: TimeSignatureValue, style
   if (prompt.includes('3/4')) return '3/4'
   if (prompt.includes('2/4')) return '2/4'
   if (prompt.includes('4/4')) return '4/4'
-  if (style === 'waltz') return '3/4'
-  if (style === 'march') return '2/4'
   return fallback
 }
 
@@ -126,8 +137,8 @@ function detectDuration(prompt: string, fallback: DurationValue, style: StyleVal
   if (prompt.includes('half')) return 'Half'
   if (prompt.includes('whole')) return 'Whole'
   if (prompt.includes('quarter')) return 'Quarter'
-  if (style === 'bach') return 'Eighth'
-  if (style === 'hymn') return 'Half'
+  if (style === 'baroque') return 'Eighth'
+  if (style === 'renaissance') return 'Half'
   return fallback
 }
 
@@ -136,13 +147,13 @@ function detectKey(prompt: string, style: StyleValue): KeySignatureValue {
   if (prompt.includes('f major') || prompt.includes('key of f') || /\bin\s+f\b/.test(prompt)) return 'F major'
   if (prompt.includes('d major') || prompt.includes('key of d') || /\bin\s+d\b/.test(prompt)) return 'D major'
   if (prompt.includes('a minor') || prompt.includes('key of a minor')) return 'A minor'
-  if (style === 'sad folk') return 'A minor'
+  if (style === 'folk') return 'A minor'
   return 'C major'
 }
 
 function detectMeasureCount(prompt: string, style: StyleValue): number {
   const match = prompt.match(/(\d+)\s*(measure|measures|bar|bars)/)
-  if (!match) return style === 'bach' ? 8 : 4
+  if (!match) return style === 'baroque' ? 8 : 4
 
   const parsed = Number(match[1])
   if (!Number.isFinite(parsed)) return 4
@@ -153,9 +164,15 @@ function detectPhraseShape(prompt: string, style: StyleValue): PhraseShapeValue 
   if (prompt.includes('question') || prompt.includes('answer') || prompt.includes('natural phrase')) return 'question answer'
   if (prompt.includes('motif') || prompt.includes('sequence')) return 'motif sequence'
   if (prompt.includes('cadence') || prompt.includes('ending')) return 'cadence focus'
-  if (style === 'bach') return 'motif sequence'
-  if (style === 'country' || style === 'sad folk') return 'question answer'
-  if (style === 'hymn') return 'cadence focus'
+  if (style === 'baroque') return 'motif sequence'
+  if (style === 'classical') return 'question answer'
+  if (style === 'romantic') return 'cadence focus'
+  if (style === 'renaissance') return 'simple contour'
+  if (style === 'jazz') return 'motif sequence'
+  if (style === 'rock') return 'question answer'
+  if (style === 'modern') return 'motif sequence'
+  if (style === 'folk') return 'question answer'
+  if (style === 'country') return 'question answer'
   return 'simple contour'
 }
 
@@ -187,12 +204,15 @@ function parseRhythmPattern(
 
   if (pattern.length > 0) return pattern
 
-  if (style === 'bach') return ['Eighth', 'Eighth', 'Eighth', 'Eighth', 'Quarter', 'Quarter']
+  if (style === 'baroque') return ['Eighth', 'Eighth', 'Eighth', 'Eighth', 'Quarter', 'Quarter']
+  if (style === 'classical') return ['Quarter', 'Eighth', 'Eighth', 'Quarter', 'Half']
+  if (style === 'romantic') return ['Quarter', 'Eighth', 'Quarter', 'Eighth', 'Half']
+  if (style === 'renaissance') return ['Half', 'Quarter', 'Quarter', 'Whole']
+  if (style === 'jazz') return ['Eighth', 'Quarter', 'Eighth', 'Quarter', 'Quarter']
+  if (style === 'rock') return ['Quarter', 'Quarter', 'Eighth', 'Eighth', 'Half']
+  if (style === 'modern') return ['16th', 'Eighth', 'Quarter', 'Eighth', '16th']
+  if (style === 'folk') return ['Quarter', 'Eighth', 'Eighth', 'Half']
   if (style === 'country') return ['Eighth', 'Eighth', 'Quarter', 'Quarter', 'Half']
-  if (style === 'sad folk') return ['Quarter', 'Eighth', 'Eighth', 'Half']
-  if (style === 'hymn') return ['Half', 'Half', 'Whole']
-  if (style === 'march') return ['Quarter', 'Eighth', 'Eighth', 'Quarter']
-  if (style === 'waltz') return ['Quarter', 'Quarter', 'Quarter']
 
   if (timeSignature === '3/4') return ['Quarter', 'Quarter', 'Half']
   if (timeSignature === '6/8') return ['Eighth', 'Eighth', 'Eighth', 'Quarter']
@@ -215,11 +235,18 @@ function shouldUseGeneratedMelody(prompt: string, explicitEvents: Omit<NoteEvent
     prompt.includes('phrase') ||
     prompt.includes('measure') ||
     prompt.includes('bar') ||
+    prompt.includes('baroque') ||
     prompt.includes('bach') ||
-    prompt.includes('country') ||
+    prompt.includes('classical') ||
+    prompt.includes('mozart') ||
+    prompt.includes('romantic') ||
+    prompt.includes('chopin') ||
+    prompt.includes('renaissance') ||
+    prompt.includes('jazz') ||
+    prompt.includes('rock') ||
+    prompt.includes('modern') ||
     prompt.includes('folk') ||
-    prompt.includes('hymn') ||
-    prompt.includes('waltz') ||
+    prompt.includes('country') ||
     prompt.includes('in c') ||
     prompt.includes('in g') ||
     prompt.includes('in f') ||
@@ -309,17 +336,27 @@ function getPhraseScaleIndex(eventIndex: number, totalEvents: number, phraseShap
   const simpleContour = [0, 1, 2, 4, 3, 2, 1, 0, 2, 3, 4, 2, 1, 0]
   const questionAnswerContour = [0, 1, 2, 4, 3, 2, 4, 5, 4, 2, 1, 0]
   const motifSequenceContour = [0, 2, 4, 2, 1, 3, 5, 3, 2, 4, 3, 1, 0]
-  const bachContour = [0, 2, 4, 5, 4, 2, 1, 3, 5, 6, 5, 3, 2, 4, 3, 1, 0]
+  const baroqueContour = [0, 2, 4, 5, 4, 2, 1, 3, 5, 6, 5, 3, 2, 4, 3, 1, 0]
+  const classicalContour = [0, 1, 2, 4, 3, 2, 1, 0]
+  const romanticContour = [0, 2, 4, 5, 3, 4, 2, 1, 0]
+  const renaissanceContour = [0, 1, 2, 1, 0, 2, 3, 2, 1, 0]
+  const jazzContour = [0, 2, 4, 5, 3, 4, 6, 5, 3, 2, 0]
+  const rockContour = [0, 2, 4, 2, 0, 4, 3, 2, 0]
+  const modernContour = [0, 3, 1, 5, 2, 6, 4, 1, 0]
+  const folkContour = [0, 2, 1, 0, 3, 2, 1, 0, 4, 3, 2, 0]
   const countryContour = [0, 2, 4, 2, 0, 2, 3, 2, 0, 1, 2, 0]
-  const sadFolkContour = [0, 2, 1, 0, 3, 2, 1, 0, 4, 3, 2, 0]
-  const hymnContour = [0, 2, 4, 4, 3, 2, 1, 0]
 
   if (progress > 0.92) return 0
 
-  if (style === 'bach') return bachContour[eventIndex % bachContour.length]
+  if (style === 'baroque') return baroqueContour[eventIndex % baroqueContour.length]
+  if (style === 'classical') return classicalContour[eventIndex % classicalContour.length]
+  if (style === 'romantic') return romanticContour[eventIndex % romanticContour.length]
+  if (style === 'renaissance') return renaissanceContour[eventIndex % renaissanceContour.length]
+  if (style === 'jazz') return jazzContour[eventIndex % jazzContour.length]
+  if (style === 'rock') return rockContour[eventIndex % rockContour.length]
+  if (style === 'modern') return modernContour[eventIndex % modernContour.length]
+  if (style === 'folk') return folkContour[eventIndex % folkContour.length]
   if (style === 'country') return countryContour[eventIndex % countryContour.length]
-  if (style === 'sad folk') return sadFolkContour[eventIndex % sadFolkContour.length]
-  if (style === 'hymn') return hymnContour[eventIndex % hymnContour.length]
 
   if (phraseShape === 'cadence focus') {
     if (progress > 0.75) return progress > 0.88 ? 0 : 4
