@@ -15,6 +15,22 @@ type StyleValue =
   | 'modern'
   | 'folk'
   | 'country'
+type ScaleSystemValue =
+  | 'major'
+  | 'natural minor'
+  | 'ionian'
+  | 'dorian'
+  | 'phrygian'
+  | 'lydian'
+  | 'mixolydian'
+  | 'aeolian'
+  | 'locrian'
+  | 'harmonic minor'
+  | 'melodic minor'
+  | 'whole tone'
+  | 'diminished'
+
+type TonalCenterValue = PitchValue
 
 export type NoteEvent = {
   duration: DurationValue
@@ -43,52 +59,45 @@ type ScaleTone = {
   accidental: AccidentalValue
 }
 
-const KEY_SCALES: Record<KeySignatureValue, ScaleTone[]> = {
-  'C major': [
-    { pitch: 'C', accidental: null },
-    { pitch: 'D', accidental: null },
-    { pitch: 'E', accidental: null },
-    { pitch: 'F', accidental: null },
-    { pitch: 'G', accidental: null },
-    { pitch: 'A', accidental: null },
-    { pitch: 'B', accidental: null },
-  ],
-  'G major': [
-    { pitch: 'G', accidental: null },
-    { pitch: 'A', accidental: null },
-    { pitch: 'B', accidental: null },
-    { pitch: 'C', accidental: null },
-    { pitch: 'D', accidental: null },
-    { pitch: 'E', accidental: null },
-    { pitch: 'F', accidental: 'Sharp' },
-  ],
-  'F major': [
-    { pitch: 'F', accidental: null },
-    { pitch: 'G', accidental: null },
-    { pitch: 'A', accidental: null },
-    { pitch: 'B', accidental: 'Flat' },
-    { pitch: 'C', accidental: null },
-    { pitch: 'D', accidental: null },
-    { pitch: 'E', accidental: null },
-  ],
-  'D major': [
-    { pitch: 'D', accidental: null },
-    { pitch: 'E', accidental: null },
-    { pitch: 'F', accidental: 'Sharp' },
-    { pitch: 'G', accidental: null },
-    { pitch: 'A', accidental: null },
-    { pitch: 'B', accidental: null },
-    { pitch: 'C', accidental: 'Sharp' },
-  ],
-  'A minor': [
-    { pitch: 'A', accidental: null },
-    { pitch: 'B', accidental: null },
-    { pitch: 'C', accidental: null },
-    { pitch: 'D', accidental: null },
-    { pitch: 'E', accidental: null },
-    { pitch: 'F', accidental: null },
-    { pitch: 'G', accidental: null },
-  ],
+const CHROMATIC_SHARP_TONES: ScaleTone[] = [
+  { pitch: 'C', accidental: null },
+  { pitch: 'C', accidental: 'Sharp' },
+  { pitch: 'D', accidental: null },
+  { pitch: 'D', accidental: 'Sharp' },
+  { pitch: 'E', accidental: null },
+  { pitch: 'F', accidental: null },
+  { pitch: 'F', accidental: 'Sharp' },
+  { pitch: 'G', accidental: null },
+  { pitch: 'G', accidental: 'Sharp' },
+  { pitch: 'A', accidental: null },
+  { pitch: 'A', accidental: 'Sharp' },
+  { pitch: 'B', accidental: null },
+]
+
+const TONAL_CENTER_INDEX: Record<TonalCenterValue, number> = {
+  C: 0,
+  D: 2,
+  E: 4,
+  F: 5,
+  G: 7,
+  A: 9,
+  B: 11,
+}
+
+const SCALE_INTERVALS: Record<ScaleSystemValue, number[]> = {
+  major: [0, 2, 4, 5, 7, 9, 11],
+  'natural minor': [0, 2, 3, 5, 7, 8, 10],
+  ionian: [0, 2, 4, 5, 7, 9, 11],
+  dorian: [0, 2, 3, 5, 7, 9, 10],
+  phrygian: [0, 1, 3, 5, 7, 8, 10],
+  lydian: [0, 2, 4, 6, 7, 9, 11],
+  mixolydian: [0, 2, 4, 5, 7, 9, 10],
+  aeolian: [0, 2, 3, 5, 7, 8, 10],
+  locrian: [0, 1, 3, 5, 6, 8, 10],
+  'harmonic minor': [0, 2, 3, 5, 7, 8, 11],
+  'melodic minor': [0, 2, 3, 5, 7, 9, 11],
+  'whole tone': [0, 2, 4, 6, 8, 10],
+  diminished: [0, 2, 3, 5, 6, 8, 9, 11],
 }
 
 function normalizePrompt(prompt: string): string {
@@ -123,6 +132,61 @@ function detectStyle(prompt: string): StyleValue {
   return 'plain'
 }
 
+function detectScaleSystem(prompt: string, style: StyleValue): ScaleSystemValue {
+  if (prompt.includes('harmonic minor')) return 'harmonic minor'
+  if (prompt.includes('melodic minor')) return 'melodic minor'
+  if (prompt.includes('whole tone')) return 'whole tone'
+  if (prompt.includes('diminished')) return 'diminished'
+  if (prompt.includes('ionian')) return 'ionian'
+  if (prompt.includes('dorian')) return 'dorian'
+  if (prompt.includes('phrygian')) return 'phrygian'
+  if (prompt.includes('lydian')) return 'lydian'
+  if (prompt.includes('mixolydian')) return 'mixolydian'
+  if (prompt.includes('aeolian')) return 'aeolian'
+  if (prompt.includes('locrian')) return 'locrian'
+  if (prompt.includes('natural minor')) return 'natural minor'
+  if (prompt.includes('minor') || style === 'folk') return 'natural minor'
+  return 'major'
+}
+
+function detectTonalCenter(prompt: string, fallback: TonalCenterValue): TonalCenterValue {
+  const directMatch = prompt.match(/\b(?:in|key of)\s+([a-g])\b/)
+  const scaleMatch = prompt.match(/\b([a-g])\s+(major|minor|ionian|dorian|phrygian|lydian|mixolydian|aeolian|locrian|harmonic minor|melodic minor|whole tone|diminished)\b/)
+  const match = directMatch || scaleMatch
+
+  if (!match) return fallback
+  const candidate = match[1].toUpperCase()
+  if (candidate === 'C' || candidate === 'D' || candidate === 'E' || candidate === 'F' || candidate === 'G' || candidate === 'A' || candidate === 'B') {
+    return candidate
+  }
+
+  return fallback
+}
+
+function getScaleTones(tonalCenter: TonalCenterValue, scaleSystem: ScaleSystemValue): ScaleTone[] {
+  const rootIndex = TONAL_CENTER_INDEX[tonalCenter]
+  const intervals = SCALE_INTERVALS[scaleSystem]
+
+  return intervals.map((interval) => CHROMATIC_SHARP_TONES[(rootIndex + interval) % 12])
+}
+
+function getDisplayScaleName(tonalCenter: TonalCenterValue, scaleSystem: ScaleSystemValue): string {
+  return `${tonalCenter} ${scaleSystem}`
+}
+
+function getKeySignatureForDisplay(tonalCenter: TonalCenterValue, scaleSystem: ScaleSystemValue): KeySignatureValue {
+  if (scaleSystem === 'major' || scaleSystem === 'ionian') {
+    if (tonalCenter === 'G') return 'G major'
+    if (tonalCenter === 'F') return 'F major'
+    if (tonalCenter === 'D') return 'D major'
+    return 'C major'
+  }
+
+  if ((scaleSystem === 'natural minor' || scaleSystem === 'aeolian') && tonalCenter === 'A') return 'A minor'
+
+  return 'C major'
+}
+
 function detectTimeSignature(prompt: string, fallback: TimeSignatureValue, style: StyleValue): TimeSignatureValue {
   if (prompt.includes('6/8')) return '6/8'
   if (prompt.includes('3/4')) return '3/4'
@@ -140,15 +204,6 @@ function detectDuration(prompt: string, fallback: DurationValue, style: StyleVal
   if (style === 'baroque') return 'Eighth'
   if (style === 'renaissance') return 'Half'
   return fallback
-}
-
-function detectKey(prompt: string, style: StyleValue): KeySignatureValue {
-  if (prompt.includes('g major') || prompt.includes('key of g') || /\bin\s+g\b/.test(prompt)) return 'G major'
-  if (prompt.includes('f major') || prompt.includes('key of f') || /\bin\s+f\b/.test(prompt)) return 'F major'
-  if (prompt.includes('d major') || prompt.includes('key of d') || /\bin\s+d\b/.test(prompt)) return 'D major'
-  if (prompt.includes('a minor') || prompt.includes('key of a minor')) return 'A minor'
-  if (style === 'folk') return 'A minor'
-  return 'C major'
 }
 
 function detectMeasureCount(prompt: string, style: StyleValue): number {
@@ -247,10 +302,24 @@ function shouldUseGeneratedMelody(prompt: string, explicitEvents: Omit<NoteEvent
     prompt.includes('modern') ||
     prompt.includes('folk') ||
     prompt.includes('country') ||
+    prompt.includes('ionian') ||
+    prompt.includes('dorian') ||
+    prompt.includes('phrygian') ||
+    prompt.includes('lydian') ||
+    prompt.includes('mixolydian') ||
+    prompt.includes('aeolian') ||
+    prompt.includes('locrian') ||
+    prompt.includes('harmonic minor') ||
+    prompt.includes('melodic minor') ||
+    prompt.includes('whole tone') ||
+    prompt.includes('diminished') ||
     prompt.includes('in c') ||
     prompt.includes('in g') ||
     prompt.includes('in f') ||
-    prompt.includes('in d')
+    prompt.includes('in d') ||
+    prompt.includes('in e') ||
+    prompt.includes('in a') ||
+    prompt.includes('in b')
   )
 }
 
@@ -377,7 +446,7 @@ function getPhraseScaleIndex(eventIndex: number, totalEvents: number, phraseShap
 
 function buildBeginnerMelodyEvents(
   prompt: string,
-  keySignature: KeySignatureValue,
+  scale: ScaleTone[],
   duration: DurationValue,
   timeSignature: TimeSignatureValue,
   measureCount: number,
@@ -385,7 +454,6 @@ function buildBeginnerMelodyEvents(
   phraseShape: PhraseShapeValue,
   style: StyleValue,
 ): Omit<NoteEvent, 'measure' | 'beat'>[] {
-  const scale = KEY_SCALES[keySignature]
   const measureBeats = getMeasureBeats(timeSignature)
   const totalBeats = measureCount * measureBeats
   const includeRests = prompt.includes('rest') || prompt.includes('space')
@@ -454,16 +522,20 @@ function placeEventAtCursor(event: Omit<NoteEvent, 'measure' | 'beat'>, cursor: 
 export function generateMusicBrainResult(promptText: string, defaults: BrainDefaults): MusicBrainResult {
   const normalizedPrompt = normalizePrompt(promptText)
   const style = detectStyle(normalizedPrompt)
+  const scaleSystem = detectScaleSystem(normalizedPrompt, style)
+  const tonalCenter = detectTonalCenter(normalizedPrompt, style === 'folk' ? 'A' : 'C')
+  const displayScaleName = getDisplayScaleName(tonalCenter, scaleSystem)
+  const scale = getScaleTones(tonalCenter, scaleSystem)
   const timeSignature = detectTimeSignature(normalizedPrompt, defaults.timeSignature, style)
   const duration = detectDuration(normalizedPrompt, defaults.duration, style)
-  const keySignature = detectKey(normalizedPrompt, style)
+  const keySignature = getKeySignatureForDisplay(tonalCenter, scaleSystem)
   const measureCount = detectMeasureCount(normalizedPrompt, style)
   const phraseShape = detectPhraseShape(normalizedPrompt, style)
   const rhythmPattern = parseRhythmPattern(normalizedPrompt, duration, timeSignature, phraseShape, style)
   const explicitEvents = extractExplicitEvents(promptText, duration, defaults.accidental)
   const shouldGenerateMelody = shouldUseGeneratedMelody(normalizedPrompt, explicitEvents)
   const sourceEvents = shouldGenerateMelody
-    ? buildBeginnerMelodyEvents(normalizedPrompt, keySignature, duration, timeSignature, measureCount, rhythmPattern, phraseShape, style)
+    ? buildBeginnerMelodyEvents(normalizedPrompt, scale, duration, timeSignature, measureCount, rhythmPattern, phraseShape, style)
     : explicitEvents
 
   const notes: NoteEvent[] = []
@@ -481,6 +553,6 @@ export function generateMusicBrainResult(promptText: string, defaults: BrainDefa
     notes,
     timeSignature,
     keySignature,
-    summary: `Generated ${notes.length} events across ${measureCount} measure(s) in ${keySignature}, ${timeSignature}, ${style} style, using ${phraseShape} phrase shape and rhythm pattern: ${rhythmPattern.join(' → ')}.`,
+    summary: `Generated ${notes.length} events across ${measureCount} measure(s) in ${displayScaleName}, ${timeSignature}, ${style} style, using ${phraseShape} phrase shape and rhythm pattern: ${rhythmPattern.join(' → ')}.`,
   }
 }
