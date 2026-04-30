@@ -5,6 +5,7 @@ type DurationValue = 'Whole' | 'Half' | 'Quarter' | 'Eighth' | '16th'
 type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
 type PitchValue = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B'
 type TimeSignatureValue = '4/4' | '3/4' | '2/4' | '6/8'
+type KeySignatureValue = 'C major' | 'G major' | 'F major' | 'D major' | 'A minor'
 
 type NoteEvent = {
   duration: DurationValue
@@ -41,6 +42,14 @@ function getVexAccidental(accidental: AccidentalValue): string | null {
 
 function getVexKey(note: NoteEvent): string {
   return `${note.pitch.toLowerCase()}/4`
+}
+
+function getVexKeySignature(keySignature: KeySignatureValue): string {
+  if (keySignature === 'G major') return 'G'
+  if (keySignature === 'F major') return 'F'
+  if (keySignature === 'D major') return 'D'
+  if (keySignature === 'A minor') return 'Am'
+  return 'C'
 }
 
 function getMeasureBeats(timeSignature: TimeSignatureValue): number {
@@ -101,7 +110,15 @@ function groupNotesByMeasure(notes: NoteEvent[]): NoteEvent[][] {
   return groups.filter(Boolean)
 }
 
-export default function ScoreRenderer({ notes, timeSignature }: { notes: NoteEvent[]; timeSignature: TimeSignatureValue }) {
+export default function ScoreRenderer({
+  notes,
+  timeSignature,
+  keySignature,
+}: {
+  notes: NoteEvent[]
+  timeSignature: TimeSignatureValue
+  keySignature: KeySignatureValue
+}) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [zoom, setZoom] = useState(0.9)
 
@@ -143,6 +160,7 @@ export default function ScoreRenderer({ notes, timeSignature }: { notes: NoteEve
       }
 
       if (measureIndex === 0) {
+        stave.addKeySignature(getVexKeySignature(keySignature))
         stave.addTimeSignature(timeSignature)
       }
 
@@ -169,10 +187,10 @@ export default function ScoreRenderer({ notes, timeSignature }: { notes: NoteEve
       voice.setStrict(false)
       voice.addTickables(vexNotes)
 
-      new Formatter().joinVoices([voice]).format([voice], staveWidth - 80)
+      new Formatter().joinVoices([voice]).format([voice], staveWidth - 90)
       voice.draw(context, stave)
     })
-  }, [notes, timeSignature])
+  }, [notes, timeSignature, keySignature])
 
   return (
     <div
@@ -197,7 +215,7 @@ export default function ScoreRenderer({ notes, timeSignature }: { notes: NoteEve
         }}
       >
         <div style={{ fontSize: 12, fontWeight: 700, color: '#71717a', textTransform: 'uppercase' }}>
-          Score Page View
+          Score Page View · {keySignature}
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
