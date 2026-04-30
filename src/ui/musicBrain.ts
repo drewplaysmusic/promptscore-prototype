@@ -116,12 +116,12 @@ function detectDuration(prompt: string, fallback: DurationValue): DurationValue 
   return fallback
 }
 
-function parseRhythmPattern(prompt: string, fallback: DurationValue): DurationValue[] {
+function parseRhythmPattern(prompt: string, fallback: DurationValue, timeSignature: TimeSignatureValue, phraseShape: PhraseShapeValue): DurationValue[] {
   const tokens = prompt.toLowerCase().split(/\s+/)
   const pattern: DurationValue[] = []
 
   if (prompt.includes('steady eighth')) return ['Eighth']
-  if (prompt.includes('steady quarter')) return ['Quarter']
+  if (prompt.includes('all quarter') || prompt.includes('steady quarter')) return ['Quarter']
   if (prompt.includes('waltz')) return ['Quarter', 'Quarter', 'Quarter']
   if (prompt.includes('march')) return ['Quarter', 'Eighth', 'Eighth', 'Quarter']
   if (prompt.includes('quarter quarter half')) return ['Quarter', 'Quarter', 'Half']
@@ -135,8 +135,15 @@ function parseRhythmPattern(prompt: string, fallback: DurationValue): DurationVa
     else if (token.includes('sixteenth') || token.includes('16th')) pattern.push('16th')
   })
 
-  if (pattern.length === 0) return [fallback]
-  return pattern
+  if (pattern.length > 0) return pattern
+
+  if (timeSignature === '3/4') return ['Quarter', 'Quarter', 'Half']
+  if (timeSignature === '6/8') return ['Eighth', 'Eighth', 'Eighth', 'Quarter']
+  if (phraseShape === 'question answer') return ['Quarter', 'Quarter', 'Half', 'Eighth', 'Eighth', 'Quarter', 'Half']
+  if (phraseShape === 'motif sequence') return ['Eighth', 'Eighth', 'Quarter', 'Quarter', 'Half']
+  if (phraseShape === 'cadence focus') return ['Quarter', 'Eighth', 'Eighth', 'Quarter', 'Half']
+
+  return fallback === 'Quarter' ? ['Quarter', 'Quarter', 'Half'] : [fallback]
 }
 
 function detectKey(prompt: string): KeySignatureValue {
@@ -346,10 +353,10 @@ export function generateMusicBrainResult(promptText: string, defaults: BrainDefa
   const normalizedPrompt = normalizePrompt(promptText)
   const timeSignature = detectTimeSignature(normalizedPrompt, defaults.timeSignature)
   const duration = detectDuration(normalizedPrompt, defaults.duration)
-  const rhythmPattern = parseRhythmPattern(normalizedPrompt, duration)
   const keySignature = detectKey(normalizedPrompt)
   const measureCount = detectMeasureCount(normalizedPrompt)
   const phraseShape = detectPhraseShape(normalizedPrompt)
+  const rhythmPattern = parseRhythmPattern(normalizedPrompt, duration, timeSignature, phraseShape)
   const explicitEvents = extractExplicitEvents(promptText, duration, defaults.accidental)
   const shouldGenerateMelody = explicitEvents.length === 0 || normalizedPrompt.includes('generate') || normalizedPrompt.includes('write') || normalizedPrompt.includes('melody')
   const sourceEvents = shouldGenerateMelody
