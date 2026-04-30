@@ -3,6 +3,7 @@ export type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
 export type PitchValue = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B'
 export type TimeSignatureValue = '4/4' | '3/4' | '2/4' | '6/8'
 export type KeySignatureValue = 'C major' | 'G major' | 'F major' | 'D major' | 'A minor'
+type PhraseShapeValue = 'simple contour' | 'question answer' | 'motif sequence' | 'cadence focus'
 
 export type NoteEvent = {
   duration: DurationValue
@@ -115,6 +116,29 @@ function detectDuration(prompt: string, fallback: DurationValue): DurationValue 
   return fallback
 }
 
+function parseRhythmPattern(prompt: string, fallback: DurationValue): DurationValue[] {
+  const tokens = prompt.toLowerCase().split(/\s+/)
+  const pattern: DurationValue[] = []
+
+  if (prompt.includes('steady eighth')) return ['Eighth']
+  if (prompt.includes('steady quarter')) return ['Quarter']
+  if (prompt.includes('waltz')) return ['Quarter', 'Quarter', 'Quarter']
+  if (prompt.includes('march')) return ['Quarter', 'Eighth', 'Eighth', 'Quarter']
+  if (prompt.includes('quarter quarter half')) return ['Quarter', 'Quarter', 'Half']
+  if (prompt.includes('eighth eighth quarter quarter')) return ['Eighth', 'Eighth', 'Quarter', 'Quarter']
+
+  tokens.forEach((token) => {
+    if (token.includes('whole')) pattern.push('Whole')
+    else if (token.includes('half')) pattern.push('Half')
+    else if (token.includes('quarter')) pattern.push('Quarter')
+    else if (token.includes('eighth') || token.includes('8th')) pattern.push('Eighth')
+    else if (token.includes('sixteenth') || token.includes('16th')) pattern.push('16th')
+  })
+
+  if (pattern.length === 0) return [fallback]
+  return pattern
+}
+
 function detectKey(prompt: string): KeySignatureValue {
   if (prompt.includes('g major') || prompt.includes('key of g')) return 'G major'
   if (prompt.includes('f major') || prompt.includes('key of f')) return 'F major'
@@ -130,6 +154,13 @@ function detectMeasureCount(prompt: string): number {
   const parsed = Number(match[1])
   if (!Number.isFinite(parsed)) return 4
   return Math.min(Math.max(parsed, 1), 16)
+}
+
+function detectPhraseShape(prompt: string): PhraseShapeValue {
+  if (prompt.includes('question') || prompt.includes('answer')) return 'question answer'
+  if (prompt.includes('motif') || prompt.includes('sequence')) return 'motif sequence'
+  if (prompt.includes('cadence') || prompt.includes('ending')) return 'cadence focus'
+  return 'simple contour'
 }
 
 function isPitchToken(token: string): token is PitchValue {
@@ -206,32 +237,81 @@ function extractExplicitEvents(prompt: string, duration: DurationValue, accident
   return events
 }
 
-function buildBeginnerMelodyEvents(prompt: string, keySignature: KeySignatureValue, duration: DurationValue, timeSignature: TimeSignatureValue, measureCount: number): Omit<NoteEvent, 'measure' | 'beat'>[] {
+function getPhraseScaleIndex(eventIndex: number, totalEvents: number, phraseShape: PhraseShapeValue): number {
+  const progress = totalEvents <= 1 ? 1 : eventIndex / (totalEvents - 1)
+  const questionAnswerContour = [0, 1, 2, 4, 3, 2, 4, 5, 4, 2, 1, 0]
+  const motifSequenceContour = [0, 1, 2, 1, 2, 3, 4, 3, 1, 2, 1, 0]
+  const simpleContour = [0, 1, 2, 4, 3, 2, 1, 0, 2, 3, 4, 2, 1, 0]
+
+  if (progress > 0.92) return 0
+
+  if (phraseShape === 'cadence focus') {
+    if (progress > 0.75) return progress > 0.88 ? 0 : 4
+    return simpleContour[eventIndex % simpleContour.length]
+  }
+
+  if (phraseShape === 'question answer') {
+    const midpoint = Math.floor(totalEvents / 2)
+    if (eventIndex === midpoint - 1) return 4
+    if (eventIndex >= midpoint && progress > 0.82) return progress > 0.92 ? 0 : 1
+    return questionAnswerContour[eventIndex % questionAnswerContour.length]
+  }
+
+  if (phraseShape === 'motif sequence') {
+    return motifSequenceContour[eventIndex % motifSequenceContour.length]
+  }
+
+  return simpleContour[eventIndex % simpleContour.length]
+}
+
+function buildBeginnerMelodyEvents(
+  prompt: string,
+  keySignature: KeySignatureValue,
+  duration: DurationValue,
+  timeSignature: TimeSignatureValue,
+  measureCount: number,
+  rhythmPattern: DurationValue[],
+  phraseShape: PhraseShapeValue,
+): Omit<NoteEvent, 'measure' | 'beat'>[] {
   const scale = KEY_SCALES[keySignature]
   const measureBeats = getMeasureBeats(timeSignature)
-  const durationBeats = getDurationBeats(duration)
-  const totalEvents = Math.max(1, Math.floor((measureCount * measureBeats) / durationBeats))
-  const contour = [0, 1, 2, 4, 3, 2, 1, 0, 2, 3, 4, 2, 1, 0]
+  const totalBeats = measureCount * measureBeats
   const includeRests = prompt.includes('rest') || prompt.includes('space')
   const events: Omit<NoteEvent, 'measure' | 'beat'>[] = []
+  let usedBeats = 0
+  let eventIndex = 0
+  const plannedDurations: DurationValue[] = []
 
-  for (let i = 0; i < totalEvents; i += 1) {
-    const isLast = i === totalEvents - 1
+  while (usedBeats < totalBeats) {
+    const patternDuration = rhythmPattern[plannedDurations.length % rhythmPattern.length] || duration
+    const durationBeats = getDurationBeats(patternDuration)
+    if (usedBeats + durationBeats > totalBeats) break
+    plannedDurations.push(patternDuration)
+    usedBeats += durationBeats
+  }
+
+  plannedDurations.forEach((patternDuration, i) => {
+    const isLast = i === plannedDurations.length - 1
     const shouldRest = includeRests && !isLast && i > 0 && i % 7 === 0
 
     if (shouldRest) {
-      events.push({ duration, accidental: null, isRest: true, pitch: 'B' })
-      continue
+      events.push({ duration: patternDuration, accidental: null, isRest: true, pitch: 'B' })
+      eventIndex += 1
+      return
     }
 
-    const scaleTone = isLast ? scale[0] : scale[contour[i % contour.length] % scale.length]
+    const scaleIndex = isLast ? 0 : getPhraseScaleIndex(eventIndex, plannedDurations.length, phraseShape)
+    const scaleTone = scale[Math.abs(scaleIndex) % scale.length]
+
     events.push({
-      duration,
+      duration: patternDuration,
       accidental: scaleTone.accidental,
       isRest: false,
       pitch: scaleTone.pitch,
     })
-  }
+
+    eventIndex += 1
+  })
 
   return events
 }
@@ -266,12 +346,14 @@ export function generateMusicBrainResult(promptText: string, defaults: BrainDefa
   const normalizedPrompt = normalizePrompt(promptText)
   const timeSignature = detectTimeSignature(normalizedPrompt, defaults.timeSignature)
   const duration = detectDuration(normalizedPrompt, defaults.duration)
+  const rhythmPattern = parseRhythmPattern(normalizedPrompt, duration)
   const keySignature = detectKey(normalizedPrompt)
   const measureCount = detectMeasureCount(normalizedPrompt)
+  const phraseShape = detectPhraseShape(normalizedPrompt)
   const explicitEvents = extractExplicitEvents(promptText, duration, defaults.accidental)
   const shouldGenerateMelody = explicitEvents.length === 0 || normalizedPrompt.includes('generate') || normalizedPrompt.includes('write') || normalizedPrompt.includes('melody')
   const sourceEvents = shouldGenerateMelody
-    ? buildBeginnerMelodyEvents(normalizedPrompt, keySignature, duration, timeSignature, measureCount)
+    ? buildBeginnerMelodyEvents(normalizedPrompt, keySignature, duration, timeSignature, measureCount, rhythmPattern, phraseShape)
     : explicitEvents
 
   const notes: NoteEvent[] = []
@@ -289,6 +371,6 @@ export function generateMusicBrainResult(promptText: string, defaults: BrainDefa
     notes,
     timeSignature,
     keySignature,
-    summary: `Generated ${notes.length} events across ${measureCount} measure(s) in ${keySignature}, ${timeSignature}, using ${duration.toLowerCase()} values.`,
+    summary: `Generated ${notes.length} events across ${measureCount} measure(s) in ${keySignature}, ${timeSignature}, using ${phraseShape} phrase shape and rhythm pattern: ${rhythmPattern.join(' → ')}.`,
   }
 }
