@@ -2,22 +2,698 @@ import React, { useState } from 'react'
 import ScoreRenderer from './ScoreRenderer'
 import { generateMusicBrainResult } from './musicBrain'
 
-// ... rest unchanged until handler
+type WorkspaceMode = 'compose' | 'learn' | 'brain' | 'playback'
+type DurationValue = 'Whole' | 'Half' | 'Quarter' | 'Eighth' | '16th'
+type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
+type PitchValue = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B'
+type TimeSignatureValue = '4/4' | '3/4' | '2/4' | '6/8'
 
-function handlePromptGenerate() {
-  const result = generateMusicBrainResult(promptText, {
-    duration: selectedDuration,
-    accidental: selectedAccidental,
-    timeSignature,
-  })
-
-  setNotes(result.notes)
-  setTimeSignature(result.timeSignature)
-  setCurrentMeasure(1)
-  setCurrentBeat(1)
-  setPromptText('')
-
-  console.log(result.summary)
+type NoteEvent = {
+  duration: DurationValue
+  accidental: AccidentalValue
+  isRest: boolean
+  pitch: PitchValue
+  measure: number
+  beat: number
 }
 
-// rest of file remains same
+type PaletteItem = {
+  label: string
+  glyph?: string
+}
+
+type PaletteGroup = {
+  title: string
+  items: PaletteItem[]
+}
+
+const MODE_LABELS: Record<WorkspaceMode, string> = {
+  compose: 'Compose',
+  learn: 'Learn',
+  brain: 'Brain',
+  playback: 'Playback',
+}
+
+const TIME_SIGNATURES: TimeSignatureValue[] = ['4/4', '3/4', '2/4', '6/8']
+
+const PALETTE_BY_MODE: Record<WorkspaceMode, PaletteGroup[]> = {
+  compose: [
+    {
+      title: 'Rhythm',
+      items: [
+        { label: 'Whole', glyph: '𝅝' },
+        { label: 'Half', glyph: '𝅗𝅥' },
+        { label: 'Quarter', glyph: '♩' },
+        { label: 'Eighth', glyph: '♪' },
+        { label: '16th', glyph: '♬' },
+        { label: 'Rest', glyph: '𝄽' },
+      ],
+    },
+    {
+      title: 'Notes',
+      items: [
+        { label: 'C', glyph: 'C' },
+        { label: 'D', glyph: 'D' },
+        { label: 'E', glyph: 'E' },
+        { label: 'F', glyph: 'F' },
+        { label: 'G', glyph: 'G' },
+        { label: 'A', glyph: 'A' },
+        { label: 'B', glyph: 'B' },
+      ],
+    },
+    {
+      title: 'Pitch',
+      items: [
+        { label: 'Sharp', glyph: '♯' },
+        { label: 'Flat', glyph: '♭' },
+        { label: 'Natural', glyph: '♮' },
+      ],
+    },
+  ],
+  learn: [
+    {
+      title: 'Lesson Tools',
+      items: [
+        { label: 'Quarter', glyph: '♩' },
+        { label: 'Eighth', glyph: '♪' },
+        { label: 'Rest', glyph: '𝄽' },
+        { label: 'Hint', glyph: '?' },
+      ],
+    },
+  ],
+  brain: [
+    {
+      title: 'Generate',
+      items: [
+        { label: 'Prompt', glyph: '✦' },
+        { label: 'Regenerate', glyph: '↻' },
+        { label: 'Compare', glyph: '⇄' },
+      ],
+    },
+  ],
+  playback: [
+    {
+      title: 'Playback',
+      items: [
+        { label: 'Play', glyph: '▶' },
+        { label: 'Stop', glyph: '■' },
+        { label: 'Loop', glyph: '↺' },
+      ],
+    },
+  ],
+}
+
+const INSPECTOR_BY_MODE: Record<WorkspaceMode, string[]> = {
+  compose: ['Selected note properties', 'Measure settings', 'Staff / instrument settings'],
+  learn: ['Exercise instructions', 'Hints', 'Progress feedback'],
+  brain: ['Music Brain v1', 'Prompt parsing', 'Generation summary'],
+  playback: ['Playback settings', 'Loop points', 'Tempo'],
+}
+
+function getDurationGlyph(duration: DurationValue): string {
+  if (duration === 'Whole') return '𝅝'
+  if (duration === 'Half') return '𝅗𝅥'
+  if (duration === 'Quarter') return '♩'
+  if (duration === 'Eighth') return '♪'
+  return '♬'
+}
+
+function getDurationWidth(duration: DurationValue): number {
+  if (duration === 'Whole') return 88
+  if (duration === 'Half') return 72
+  if (duration === 'Quarter') return 56
+  if (duration === 'Eighth') return 46
+  return 40
+}
+
+function getDurationBeats(duration: DurationValue): number {
+  if (duration === 'Whole') return 4
+  if (duration === 'Half') return 2
+  if (duration === 'Quarter') return 1
+  if (duration === 'Eighth') return 0.5
+  return 0.25
+}
+
+function getMeasureBeats(timeSignature: TimeSignatureValue): number {
+  if (timeSignature === '3/4') return 3
+  if (timeSignature === '2/4') return 2
+  if (timeSignature === '6/8') return 3
+  return 4
+}
+
+function getAccidentalGlyph(accidental: AccidentalValue): string {
+  if (accidental === 'Sharp') return '♯'
+  if (accidental === 'Flat') return '♭'
+  if (accidental === 'Natural') return '♮'
+  return ''
+}
+
+function getPitchOffset(pitch: PitchValue): number {
+  const offsets: Record<PitchValue, number> = {
+    C: 42,
+    D: 34,
+    E: 26,
+    F: 18,
+    G: 10,
+    A: 2,
+    B: -6,
+  }
+
+  return offsets[pitch]
+}
+
+function isPitchValue(value: string): value is PitchValue {
+  return ['C', 'D', 'E', 'F', 'G', 'A', 'B'].includes(value)
+}
+
+function placeEventAtCursor(
+  event: Omit<NoteEvent, 'measure' | 'beat'>,
+  cursor: { measure: number; beat: number },
+  timeSignature: TimeSignatureValue,
+): { note: NoteEvent; nextMeasure: number; nextBeat: number } {
+  const measureBeats = getMeasureBeats(timeSignature)
+  const durationBeats = getDurationBeats(event.duration)
+  let measure = cursor.measure
+  let beat = cursor.beat
+
+  if (beat + durationBeats > measureBeats + 1) {
+    measure += 1
+    beat = 1
+  }
+
+  const note: NoteEvent = {
+    ...event,
+    measure,
+    beat,
+  }
+
+  const nextBeat = beat + durationBeats
+
+  if (nextBeat >= measureBeats + 1) {
+    return { note, nextMeasure: measure + 1, nextBeat: 1 }
+  }
+
+  return { note, nextMeasure: measure, nextBeat }
+}
+
+function PanelCard(props: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ border: '1px solid #d4d4d8', borderRadius: 12, background: '#ffffff', padding: 12 }}>
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: 700,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          color: '#71717a',
+          marginBottom: 10,
+        }}
+      >
+        {props.title}
+      </div>
+      <div style={{ display: 'grid', gap: 8 }}>{props.children}</div>
+    </div>
+  )
+}
+
+function PaletteButton(props: { item: PaletteItem; isActive?: boolean; onClick?: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      style={{
+        border: props.isActive ? '1px solid #111827' : '1px solid #d4d4d8',
+        borderRadius: 10,
+        background: props.isActive ? '#e5e7eb' : '#fafafa',
+        color: '#111827',
+        padding: '10px 12px',
+        textAlign: 'left',
+        fontSize: 14,
+        cursor: 'pointer',
+        display: 'grid',
+        gridTemplateColumns: '28px 1fr',
+        alignItems: 'center',
+        gap: 10,
+      }}
+    >
+      <span style={{ fontSize: 20, lineHeight: 1, display: 'inline-flex', justifyContent: 'center' }}>
+        {props.item.glyph || '•'}
+      </span>
+      <span>{props.item.label}</span>
+    </button>
+  )
+}
+
+export default function PromptScoreShell() {
+  const [mode, setMode] = useState<WorkspaceMode>('compose')
+  const [selectedDuration, setSelectedDuration] = useState<DurationValue>('Quarter')
+  const [selectedAccidental, setSelectedAccidental] = useState<AccidentalValue>(null)
+  const [restMode, setRestMode] = useState(false)
+  const [selectedPitch, setSelectedPitch] = useState<PitchValue>('C')
+  const [timeSignature, setTimeSignature] = useState<TimeSignatureValue>('4/4')
+  const [notes, setNotes] = useState<NoteEvent[]>([])
+  const [currentBeat, setCurrentBeat] = useState(1)
+  const [currentMeasure, setCurrentMeasure] = useState(1)
+  const [promptText, setPromptText] = useState('')
+  const [brainSummary, setBrainSummary] = useState('Music Brain ready.')
+
+  function handleComposePaletteClick(item: PaletteItem) {
+    if (isPitchValue(item.label)) {
+      setSelectedPitch(item.label)
+      return
+    }
+
+    if (
+      item.label === 'Whole' ||
+      item.label === 'Half' ||
+      item.label === 'Quarter' ||
+      item.label === 'Eighth' ||
+      item.label === '16th'
+    ) {
+      setSelectedDuration(item.label)
+      setRestMode(false)
+      return
+    }
+
+    if (item.label === 'Rest') {
+      setRestMode((current) => !current)
+      return
+    }
+
+    if (item.label === 'Sharp' || item.label === 'Flat' || item.label === 'Natural') {
+      setSelectedAccidental((current) => (current === item.label ? null : item.label))
+    }
+  }
+
+  function isComposeItemActive(item: PaletteItem): boolean {
+    if (item.label === selectedPitch) return true
+    if (item.label === selectedDuration) return true
+    if (item.label === 'Rest' && restMode) return true
+    if (selectedAccidental && item.label === selectedAccidental) return true
+    return false
+  }
+
+  function handleCanvasClick() {
+    const placed = placeEventAtCursor(
+      {
+        duration: selectedDuration,
+        accidental: selectedAccidental,
+        isRest: restMode,
+        pitch: selectedPitch,
+      },
+      { measure: currentMeasure, beat: currentBeat },
+      timeSignature,
+    )
+
+    setNotes((prev) => [...prev, placed.note])
+    setCurrentMeasure(placed.nextMeasure)
+    setCurrentBeat(placed.nextBeat)
+  }
+
+  function handlePromptGenerate() {
+    const result = generateMusicBrainResult(promptText, {
+      duration: selectedDuration,
+      accidental: selectedAccidental,
+      timeSignature,
+    })
+
+    setNotes(result.notes)
+    setTimeSignature(result.timeSignature)
+    setCurrentMeasure(1)
+    setCurrentBeat(1)
+    setPromptText('')
+    setBrainSummary(result.summary)
+  }
+
+  function handleTimeSignatureChange(nextTimeSignature: TimeSignatureValue) {
+    setTimeSignature(nextTimeSignature)
+    setNotes([])
+    setCurrentMeasure(1)
+    setCurrentBeat(1)
+    setBrainSummary(`Meter changed to ${nextTimeSignature}. Score cleared for clean measure logic.`)
+  }
+
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        background: '#f4f4f5',
+        color: '#111827',
+        fontFamily: 'Inter, Arial, sans-serif',
+        display: 'grid',
+        gridTemplateRows: '64px 1fr 60px',
+      }}
+    >
+      <header
+        style={{
+          borderBottom: '1px solid #e4e4e7',
+          background: '#ffffff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 20px',
+          gap: 16,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ fontSize: 18, fontWeight: 800 }}>PromptScore</div>
+          <nav style={{ display: 'flex', gap: 10, color: '#52525b', fontSize: 14 }}>
+            <span>File</span>
+            <span>Edit</span>
+            <span>View</span>
+            <span>Export</span>
+          </nav>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {(Object.keys(MODE_LABELS) as WorkspaceMode[]).map((workspace) => {
+            const isActive = workspace === mode
+            return (
+              <button
+                key={workspace}
+                type="button"
+                onClick={() => setMode(workspace)}
+                style={{
+                  border: isActive ? '1px solid #111827' : '1px solid #d4d4d8',
+                  background: isActive ? '#111827' : '#ffffff',
+                  color: isActive ? '#ffffff' : '#111827',
+                  borderRadius: 999,
+                  padding: '8px 12px',
+                  fontSize: 14,
+                  cursor: 'pointer',
+                }}
+              >
+                {MODE_LABELS[workspace]}
+              </button>
+            )
+          })}
+        </div>
+      </header>
+
+      <main
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '260px 1fr 300px',
+          gap: 16,
+          padding: 16,
+        }}
+      >
+        <aside style={{ display: 'grid', gap: 12 }}>
+          {PALETTE_BY_MODE[mode].map((group) => (
+            <PanelCard key={group.title} title={group.title}>
+              {group.items.map((item) => (
+                <PaletteButton
+                  key={item.label}
+                  item={item}
+                  isActive={mode === 'compose' ? isComposeItemActive(item) : false}
+                  onClick={mode === 'compose' ? () => handleComposePaletteClick(item) : undefined}
+                />
+              ))}
+            </PanelCard>
+          ))}
+        </aside>
+
+        <section
+          style={{
+            border: '1px solid #d4d4d8',
+            borderRadius: 16,
+            background: '#ffffff',
+            padding: 18,
+            display: 'grid',
+            gridTemplateRows: 'auto auto 1fr',
+            gap: 16,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <div>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: '#71717a',
+                }}
+              >
+                Workspace
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 800 }}>{MODE_LABELS[mode]} Mode</div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                value={promptText}
+                onChange={(event) => setPromptText(event.target.value)}
+                placeholder="Try: generate a 4 measure melody in G major"
+                style={{
+                  border: '1px solid #d4d4d8',
+                  borderRadius: 10,
+                  padding: '10px 12px',
+                  fontSize: 14,
+                  minWidth: 320,
+                }}
+              />
+              <button
+                type="button"
+                onClick={handlePromptGenerate}
+                style={{
+                  border: '1px solid #111827',
+                  background: '#111827',
+                  color: '#ffffff',
+                  borderRadius: 10,
+                  padding: '10px 14px',
+                  fontSize: 14,
+                  cursor: 'pointer',
+                }}
+              >
+                Generate
+              </button>
+            </div>
+          </div>
+
+          {mode === 'compose' ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>
+                Duration: <strong>{selectedDuration}</strong>
+              </div>
+              <div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>
+                Pitch: <strong>{selectedPitch}</strong>
+              </div>
+              <div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>
+                Accidental: <strong>{selectedAccidental || 'None'}</strong>
+              </div>
+              <div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: restMode ? '#111827' : '#fafafa', color: restMode ? '#ffffff' : '#111827', padding: '8px 12px', fontSize: 14 }}>
+                Rest mode: <strong>{restMode ? 'On' : 'Off'}</strong>
+              </div>
+              <div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>
+                Position: <strong>M{currentMeasure} B{currentBeat}</strong>
+              </div>
+              <label style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>
+                Meter:{' '}
+                <select
+                  value={timeSignature}
+                  onChange={(event) => handleTimeSignatureChange(event.target.value as TimeSignatureValue)}
+                  style={{ border: 0, background: 'transparent', fontWeight: 700 }}
+                >
+                  {TIME_SIGNATURES.map((meter) => (
+                    <option key={meter} value={meter}>
+                      {meter}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          ) : null}
+
+          <div
+            onClick={mode === 'compose' ? handleCanvasClick : undefined}
+            style={{
+              border: '1px dashed #cbd5e1',
+              borderRadius: 14,
+              background: 'linear-gradient(180deg, #ffffff 0%, #fafafa 100%)',
+              display: 'grid',
+              placeItems: 'center',
+              minHeight: 420,
+              cursor: mode === 'compose' ? 'pointer' : 'default',
+            }}
+          >
+            <div style={{ textAlign: 'center', width: '100%', maxWidth: 720, padding: 16 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Score Canvas</div>
+              <div style={{ color: '#52525b', lineHeight: 1.5 }}>
+                This central area becomes the notation surface, exercise view, Brain mode candidate area, or playback-follow score depending on the active workspace.
+              </div>
+
+              {mode === 'compose' ? (
+                <div style={{ marginTop: 18, color: '#111827', fontSize: 14 }}>
+                  Current entry will place a <strong>{restMode ? 'rest' : selectedPitch + ' ' + selectedDuration.toLowerCase() + ' note'}</strong>
+                  {restMode ? '' : selectedAccidental ? ` with ${selectedAccidental.toLowerCase()}` : ''} at <strong>M{currentMeasure} B{currentBeat}</strong> in <strong>{timeSignature}</strong>.
+                </div>
+              ) : null}
+
+              <ScoreRenderer notes={notes} timeSignature={timeSignature} />
+
+              {notes.length > 0 && (
+                <div
+                  style={{
+                    margin: '28px auto 0',
+                    position: 'relative',
+                    width: '100%',
+                    maxWidth: 660,
+                    minHeight: 180,
+                    display: 'grid',
+                    placeItems: 'center',
+                  }}
+                >
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      display: 'grid',
+                      alignContent: 'center',
+                      gap: 14,
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          height: 1,
+                          background: '#cbd5e1',
+                          width: '100%',
+                        }}
+                      />
+                    ))}
+                  </div>
+
+                  <div
+                    style={{
+                      position: 'relative',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      flexWrap: 'wrap',
+                      justifyContent: 'center',
+                      padding: '24px 12px',
+                    }}
+                  >
+                    {notes.map((note, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          width: getDurationWidth(note.duration),
+                          minHeight: 72,
+                          border: '1px solid #d4d4d8',
+                          borderRadius: 12,
+                          background: note.isRest ? '#f3f4f6' : '#ffffff',
+                          display: 'grid',
+                          placeItems: 'center',
+                          padding: 8,
+                          zIndex: 1,
+                          transform: note.isRest ? 'translateY(0px)' : `translateY(${getPitchOffset(note.pitch)}px)`,
+                        }}
+                      >
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: 28, lineHeight: 1 }}>
+                            {note.isRest ? '𝄽' : getDurationGlyph(note.duration)}
+                          </div>
+
+                          {!note.isRest && note.accidental ? (
+                            <div style={{ fontSize: 14, marginTop: 6 }}>
+                              {getAccidentalGlyph(note.accidental)}
+                            </div>
+                          ) : null}
+
+                          {!note.isRest ? (
+                            <div style={{ fontSize: 11, marginTop: 4, color: '#71717a' }}>{note.pitch}</div>
+                          ) : null}
+
+                          <div style={{ fontSize: 10, marginTop: 4, color: '#a1a1aa' }}>
+                            M{note.measure} B{note.beat}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <aside style={{ display: 'grid', gap: 12 }}>
+          <PanelCard title="Inspector">
+            {INSPECTOR_BY_MODE[mode].map((item) => (
+              <div
+                key={item}
+                style={{
+                  border: '1px solid #e4e4e7',
+                  borderRadius: 10,
+                  background: '#fafafa',
+                  padding: 10,
+                  fontSize: 14,
+                }}
+              >
+                {item}
+              </div>
+            ))}
+          </PanelCard>
+
+          <PanelCard title="Quick Status">
+            <div>Mode: {MODE_LABELS[mode]}</div>
+            <div>Document: Untitled Score</div>
+            <div>Meter: {timeSignature}</div>
+            <div>Key: C major</div>
+            {mode === 'compose' ? (
+              <>
+                <div>Selected Duration: {selectedDuration}</div>
+                <div>Selected Pitch: {selectedPitch}</div>
+                <div>Selected Accidental: {selectedAccidental || 'None'}</div>
+                <div>Rest Mode: {restMode ? 'On' : 'Off'}</div>
+                <div>Current Measure: {currentMeasure}</div>
+                <div>Current Beat: {currentBeat}</div>
+                <div>Events: {notes.length}</div>
+              </>
+            ) : null}
+          </PanelCard>
+
+          <PanelCard title="Brain Result">
+            <div style={{ fontSize: 14, lineHeight: 1.5 }}>{brainSummary}</div>
+          </PanelCard>
+        </aside>
+      </main>
+
+      <footer
+        style={{
+          borderTop: '1px solid #e4e4e7',
+          background: '#ffffff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 20px',
+        }}
+      >
+        <div style={{ display: 'flex', gap: 10 }}>
+          {['Play', 'Stop', 'Loop', 'Tempo 92', 'Metronome'].map((item) => (
+            <button
+              key={item}
+              type="button"
+              style={{
+                border: '1px solid #d4d4d8',
+                background: '#fafafa',
+                borderRadius: 10,
+                padding: '8px 12px',
+                fontSize: 14,
+                cursor: 'pointer',
+              }}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ color: '#71717a', fontSize: 13 }}>PromptScore workspace shell v1</div>
+      </footer>
+    </div>
+  )
+}
