@@ -120,11 +120,26 @@ function getBeamBoundarySize(timeSignature: TimeSignatureValue): number {
   return 1
 }
 
+function getBeatStart(note: NoteEvent, fallbackBeat: number): number {
+  return note.measure > 0 && note.beat > 0 ? note.beat : fallbackBeat
+}
+
+function getBeamBoundaryIndex(beatStart: number, boundarySize: number): number {
+  return Math.floor((beatStart - 1 + 0.0001) / boundarySize)
+}
+
+function noteCrossesBeamBoundary(note: NoteEvent, beatStart: number, boundarySize: number): boolean {
+  const durationBeats = getDurationBeats(note.duration)
+  const startBoundary = getBeamBoundaryIndex(beatStart, boundarySize)
+  const endBoundary = getBeamBoundaryIndex(beatStart + durationBeats - 0.001, boundarySize)
+  return startBoundary !== endBoundary
+}
+
 function getMeterAwareBeams(vexNotes: StaveNote[], notesForMeasure: NoteEvent[], timeSignature: TimeSignatureValue): Beam[] {
   const beams: Beam[] = []
   const boundarySize = getBeamBoundarySize(timeSignature)
-  let beatCursor = 1
-  let activeGroupBoundary: number | null = null
+  let fallbackBeatCursor = 1
+  let activeBoundary: number | null = null
   let activeGroup: StaveNote[] = []
 
   function flushGroup() {
@@ -135,25 +150,24 @@ function getMeterAwareBeams(vexNotes: StaveNote[], notesForMeasure: NoteEvent[],
   }
 
   notesForMeasure.forEach((note, index) => {
-    const durationBeats = getDurationBeats(note.duration)
-    const startsBoundary = Math.abs(((beatCursor - 1) / boundarySize) - Math.round((beatCursor - 1) / boundarySize)) < 0.001
-    const groupBoundary = Math.floor((beatCursor - 1) / boundarySize)
-    const crossesBoundary = Math.floor((beatCursor - 1 + durationBeats - 0.001) / boundarySize) !== groupBoundary
+    const beatStart = getBeatStart(note, fallbackBeatCursor)
+    const boundaryIndex = getBeamBoundaryIndex(beatStart, boundarySize)
     const isTriplet = note.duration === 'TripletEighth'
+    const crossesBoundary = noteCrossesBeamBoundary(note, beatStart, boundarySize)
 
-    if (startsBoundary || (activeGroupBoundary !== null && groupBoundary !== activeGroupBoundary) || isTriplet) {
+    if (activeBoundary !== null && boundaryIndex !== activeBoundary) {
       flushGroup()
     }
 
-    activeGroupBoundary = groupBoundary
+    activeBoundary = boundaryIndex
 
-    if (isBeamable(note) && !crossesBoundary && !isTriplet) {
+    if (isBeamable(note) && !isTriplet && !crossesBoundary) {
       activeGroup.push(vexNotes[index])
     } else {
       flushGroup()
     }
 
-    beatCursor += durationBeats
+    fallbackBeatCursor += getDurationBeats(note.duration)
   })
 
   flushGroup()
