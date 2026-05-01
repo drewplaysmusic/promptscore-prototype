@@ -104,6 +104,14 @@ function normalizePrompt(prompt: string): string {
   return prompt.toLowerCase().replace(/[,.;:]/g, ' ')
 }
 
+function removeScaleWordsFromRhythmParsing(prompt: string): string {
+  return prompt
+    .replace(/whole tone/g, '')
+    .replace(/harmonic minor/g, '')
+    .replace(/melodic minor/g, '')
+    .replace(/natural minor/g, '')
+}
+
 function getDurationBeats(duration: DurationValue): number {
   if (duration === 'Whole') return 4
   if (duration === 'Half') return 2
@@ -196,11 +204,13 @@ function detectTimeSignature(prompt: string, fallback: TimeSignatureValue, style
 }
 
 function detectDuration(prompt: string, fallback: DurationValue, style: StyleValue): DurationValue {
-  if (prompt.includes('sixteenth') || prompt.includes('16th')) return '16th'
-  if (prompt.includes('eighth') || prompt.includes('8th')) return 'Eighth'
-  if (prompt.includes('half')) return 'Half'
-  if (prompt.includes('whole')) return 'Whole'
-  if (prompt.includes('quarter')) return 'Quarter'
+  const rhythmPrompt = removeScaleWordsFromRhythmParsing(prompt)
+
+  if (rhythmPrompt.includes('sixteenth') || rhythmPrompt.includes('16th')) return '16th'
+  if (rhythmPrompt.includes('eighth') || rhythmPrompt.includes('8th')) return 'Eighth'
+  if (rhythmPrompt.includes('half')) return 'Half'
+  if (rhythmPrompt.includes('whole')) return 'Whole'
+  if (rhythmPrompt.includes('quarter')) return 'Quarter'
   if (style === 'baroque') return 'Eighth'
   if (style === 'renaissance') return 'Half'
   return fallback
@@ -238,16 +248,17 @@ function parseRhythmPattern(
   phraseShape: PhraseShapeValue,
   style: StyleValue,
 ): DurationValue[] {
-  const tokens = prompt.toLowerCase().split(/\s+/)
+  const rhythmPrompt = removeScaleWordsFromRhythmParsing(prompt)
+  const tokens = rhythmPrompt.toLowerCase().split(/\s+/)
   const pattern: DurationValue[] = []
 
-  if (prompt.includes('advanced rhythm')) return ['Eighth', 'Quarter', 'Eighth', 'Quarter', 'Half']
-  if (prompt.includes('syncopated')) return ['Eighth', 'Quarter', 'Eighth', 'Quarter', 'Quarter']
-  if (prompt.includes('sixteenth rhythm')) return ['16th', '16th', 'Eighth', 'Quarter', 'Quarter']
-  if (prompt.includes('steady eighth')) return ['Eighth']
-  if (prompt.includes('all quarter') || prompt.includes('steady quarter')) return ['Quarter']
-  if (prompt.includes('quarter quarter half')) return ['Quarter', 'Quarter', 'Half']
-  if (prompt.includes('eighth eighth quarter quarter')) return ['Eighth', 'Eighth', 'Quarter', 'Quarter']
+  if (rhythmPrompt.includes('advanced rhythm')) return ['Quarter', 'Eighth', 'Eighth', 'Half']
+  if (rhythmPrompt.includes('syncopated')) return ['Eighth', 'Quarter', 'Eighth', 'Half']
+  if (rhythmPrompt.includes('sixteenth rhythm')) return ['16th', '16th', 'Eighth', 'Quarter', 'Half']
+  if (rhythmPrompt.includes('steady eighth')) return ['Eighth']
+  if (rhythmPrompt.includes('all quarter') || rhythmPrompt.includes('steady quarter')) return ['Quarter']
+  if (rhythmPrompt.includes('quarter quarter half')) return ['Quarter', 'Quarter', 'Half']
+  if (rhythmPrompt.includes('eighth eighth quarter quarter')) return ['Eighth', 'Eighth', 'Quarter', 'Quarter']
 
   tokens.forEach((token) => {
     if (token.includes('whole')) pattern.push('Whole')
@@ -259,21 +270,21 @@ function parseRhythmPattern(
 
   if (pattern.length > 0) return pattern
 
-  if (style === 'baroque') return ['Eighth', 'Eighth', 'Eighth', 'Eighth', 'Quarter', 'Quarter']
-  if (style === 'classical') return ['Quarter', 'Eighth', 'Eighth', 'Quarter', 'Half']
-  if (style === 'romantic') return ['Quarter', 'Eighth', 'Quarter', 'Eighth', 'Half']
-  if (style === 'renaissance') return ['Half', 'Quarter', 'Quarter', 'Whole']
-  if (style === 'jazz') return ['Eighth', 'Quarter', 'Eighth', 'Quarter', 'Quarter']
-  if (style === 'rock') return ['Quarter', 'Quarter', 'Eighth', 'Eighth', 'Half']
-  if (style === 'modern') return ['16th', 'Eighth', 'Quarter', 'Eighth', '16th']
+  if (style === 'baroque') return ['Eighth', 'Eighth', 'Quarter', 'Quarter', 'Half']
+  if (style === 'classical') return ['Quarter', 'Eighth', 'Eighth', 'Half']
+  if (style === 'romantic') return ['Quarter', 'Eighth', 'Quarter', 'Half']
+  if (style === 'renaissance') return ['Half', 'Half', 'Whole']
+  if (style === 'jazz') return ['Eighth', 'Quarter', 'Eighth', 'Half']
+  if (style === 'rock') return ['Quarter', 'Quarter', 'Half']
+  if (style === 'modern') return ['Eighth', 'Quarter', 'Eighth', 'Half']
   if (style === 'folk') return ['Quarter', 'Eighth', 'Eighth', 'Half']
-  if (style === 'country') return ['Eighth', 'Eighth', 'Quarter', 'Quarter', 'Half']
+  if (style === 'country') return ['Eighth', 'Eighth', 'Quarter', 'Half']
 
-  if (timeSignature === '3/4') return ['Quarter', 'Quarter', 'Half']
-  if (timeSignature === '6/8') return ['Eighth', 'Eighth', 'Eighth', 'Quarter']
-  if (phraseShape === 'question answer') return ['Quarter', 'Quarter', 'Half', 'Eighth', 'Eighth', 'Quarter', 'Half']
-  if (phraseShape === 'motif sequence') return ['Eighth', 'Eighth', 'Quarter', 'Quarter', 'Half']
-  if (phraseShape === 'cadence focus') return ['Quarter', 'Eighth', 'Eighth', 'Quarter', 'Half']
+  if (timeSignature === '3/4') return ['Quarter', 'Half']
+  if (timeSignature === '6/8') return ['Eighth', 'Eighth', 'Quarter']
+  if (phraseShape === 'question answer') return ['Quarter', 'Quarter', 'Half']
+  if (phraseShape === 'motif sequence') return ['Eighth', 'Eighth', 'Quarter', 'Half']
+  if (phraseShape === 'cadence focus') return ['Quarter', 'Eighth', 'Eighth', 'Half']
 
   return fallback === 'Quarter' ? ['Quarter', 'Quarter', 'Half'] : [fallback]
 }
