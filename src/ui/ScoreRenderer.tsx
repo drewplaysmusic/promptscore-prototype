@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Accidental as VFAccidental, Beam, Formatter, Renderer, Stave, StaveNote, Voice } from 'vexflow'
+import { Accidental as VFAccidental, Beam, Formatter, Renderer, Stave, StaveNote, Tuplet, Voice } from 'vexflow'
 
-type DurationValue = 'Whole' | 'Half' | 'Quarter' | 'Eighth' | '16th'
+type DurationValue = 'Whole' | 'Half' | 'Quarter' | 'Eighth' | '16th' | 'TripletEighth'
 type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
 type PitchValue = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B'
 type TimeSignatureValue = '4/4' | '3/4' | '2/4' | '6/8'
@@ -21,7 +21,7 @@ function getVexDuration(duration: DurationValue, isRest: boolean): string {
   if (duration === 'Whole') return `w${suffix}`
   if (duration === 'Half') return `h${suffix}`
   if (duration === 'Quarter') return `q${suffix}`
-  if (duration === 'Eighth') return `8${suffix}`
+  if (duration === 'Eighth' || duration === 'TripletEighth') return `8${suffix}`
   return `16${suffix}`
 }
 
@@ -30,6 +30,7 @@ function getDurationBeats(duration: DurationValue): number {
   if (duration === 'Half') return 2
   if (duration === 'Quarter') return 1
   if (duration === 'Eighth') return 0.5
+  if (duration === 'TripletEighth') return 1 / 3
   return 0.25
 }
 
@@ -111,7 +112,7 @@ function groupNotesByMeasure(notes: NoteEvent[]): NoteEvent[][] {
 }
 
 function isBeamable(note: NoteEvent): boolean {
-  return !note.isRest && (note.duration === 'Eighth' || note.duration === '16th')
+  return !note.isRest && (note.duration === 'Eighth' || note.duration === '16th' || note.duration === 'TripletEighth')
 }
 
 function getBeamGroupSize(timeSignature: TimeSignatureValue): number {
@@ -153,6 +154,31 @@ function getMeterAwareBeams(vexNotes: StaveNote[], notesForMeasure: NoteEvent[],
 
   flushGroup()
   return beams
+}
+
+function getTripletTuplets(vexNotes: StaveNote[], notesForMeasure: NoteEvent[]): Tuplet[] {
+  const tuplets: Tuplet[] = []
+  let activeTripletGroup: StaveNote[] = []
+
+  function flushTripletGroup() {
+    if (activeTripletGroup.length === 3) {
+      tuplets.push(new Tuplet(activeTripletGroup, { num_notes: 3, notes_occupied: 2 }))
+    }
+    activeTripletGroup = []
+  }
+
+  notesForMeasure.forEach((note, index) => {
+    if (note.duration === 'TripletEighth' && !note.isRest) {
+      activeTripletGroup.push(vexNotes[index])
+      if (activeTripletGroup.length === 3) flushTripletGroup()
+      return
+    }
+
+    flushTripletGroup()
+  })
+
+  flushTripletGroup()
+  return tuplets
 }
 
 export default function ScoreRenderer({
@@ -245,11 +271,15 @@ export default function ScoreRenderer({
       voice.addTickables(vexNotes)
 
       const beams = getMeterAwareBeams(vexNotes, measureWithPadding, timeSignature)
+      const tuplets = getTripletTuplets(vexNotes, measureWithPadding)
 
       new Formatter().joinVoices([voice]).format([voice], staveWidth - 90)
       voice.draw(context, stave)
       beams.forEach((beam) => {
         beam.setContext(context).draw()
+      })
+      tuplets.forEach((tuplet) => {
+        tuplet.setContext(context).draw()
       })
     })
   }, [notes, timeSignature, keySignature, harmonyProgression, showHarmonyOverlay])
