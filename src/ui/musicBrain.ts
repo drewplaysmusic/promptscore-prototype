@@ -205,6 +205,32 @@ function getKeySignatureForDisplay(tonalCenter: TonalCenterValue, scaleSystem: S
   return 'C major'
 }
 
+function getScaleToneSemitone(scale: ScaleTone[], scaleIndex: number): number {
+  const tone = scale[Math.abs(scaleIndex) % scale.length]
+  const naturalIndex = TONAL_CENTER_INDEX[tone.pitch]
+
+  if (tone.accidental === 'Sharp') return naturalIndex + 1
+  if (tone.accidental === 'Flat') return naturalIndex - 1
+  return naturalIndex
+}
+
+function getNearestChordScaleIndex(
+  scale: ScaleTone[],
+  chordScaleIndices: number[],
+  previousScaleIndex: number | null,
+  fallbackIndex: number,
+): number {
+  if (previousScaleIndex === null) return fallbackIndex
+
+  const previousSemitone = getScaleToneSemitone(scale, previousScaleIndex)
+
+  return chordScaleIndices.reduce((best, candidate) => {
+    const bestDistance = Math.abs(getScaleToneSemitone(scale, best) - previousSemitone)
+    const candidateDistance = Math.abs(getScaleToneSemitone(scale, candidate) - previousSemitone)
+    return candidateDistance < bestDistance ? candidate : best
+  }, chordScaleIndices[0])
+}
+
 function getHarmonyChordScaleIndices(harmonyLabel: string): number[] | null {
   const cleaned = harmonyLabel.replace(/maj|min|m|alt|7|°/g, '')
 
@@ -226,17 +252,19 @@ function getHarmonyLabelForMeasure(harmony: HarmonyPlan, measureIndex: number): 
 }
 
 function getHarmonyTargetScaleIndex(
+  scale: ScaleTone[],
   harmony: HarmonyPlan,
   measureIndex: number,
   eventIndex: number,
   isCadence: boolean,
+  previousScaleIndex: number | null,
 ): number | null {
   const label = getHarmonyLabelForMeasure(harmony, measureIndex)
   const chordIndices = getHarmonyChordScaleIndices(label)
   if (!chordIndices) return null
 
-  if (isCadence) return chordIndices[0]
-  return chordIndices[eventIndex % chordIndices.length]
+  if (isCadence) return getNearestChordScaleIndex(scale, chordIndices, previousScaleIndex, chordIndices[0])
+  return getNearestChordScaleIndex(scale, chordIndices, previousScaleIndex, chordIndices[eventIndex % chordIndices.length])
 }
 
 function detectTimeSignature(prompt: string, fallback: TimeSignatureValue, style: StyleValue): TimeSignatureValue {
@@ -516,6 +544,7 @@ function buildBeginnerMelodyEvents(
   const events: Omit<NoteEvent, 'measure' | 'beat'>[] = []
   let usedBeats = 0
   let eventIndex = 0
+  let previousScaleIndex: number | null = null
   const plannedDurations: PlannedDuration[] = []
 
   while (usedBeats < totalBeats) {
@@ -545,7 +574,7 @@ function buildBeginnerMelodyEvents(
     const contourScaleIndex = isLast ? 0 : getPhraseScaleIndex(eventIndex, plannedDurations.length, phraseShape, style)
     const isStrongBeat = Math.abs(plannedDuration.beatInMeasure - 1) < 0.001
     const harmonyScaleIndex = isStrongBeat || isLast
-      ? getHarmonyTargetScaleIndex(harmony, plannedDuration.measureIndex, eventIndex, isLast)
+      ? getHarmonyTargetScaleIndex(scale, harmony, plannedDuration.measureIndex, eventIndex, isLast, previousScaleIndex)
       : null
     const scaleIndex = harmonyScaleIndex ?? contourScaleIndex
     const scaleTone = scale[Math.abs(scaleIndex) % scale.length]
@@ -557,6 +586,7 @@ function buildBeginnerMelodyEvents(
       pitch: scaleTone.pitch,
     })
 
+    previousScaleIndex = scaleIndex
     eventIndex += 1
   })
 
@@ -622,6 +652,6 @@ export function generateMusicBrainResult(promptText: string, defaults: BrainDefa
     timeSignature,
     keySignature,
     harmony,
-    summary: `Generated ${notes.length} events across ${measureCount} measure(s) in ${displayScaleName}, ${timeSignature}, ${style} style, using ${phraseShape} phrase shape and rhythm pattern: ${rhythmPattern.join(' → ')}. Harmony: ${harmony.progression.join(' → ')} (${harmony.label}). Strong beats now target active chord tones.`,
+    summary: `Generated ${notes.length} events across ${measureCount} measure(s) in ${displayScaleName}, ${timeSignature}, ${style} style, using ${phraseShape} phrase shape and rhythm pattern: ${rhythmPattern.join(' → ')}. Harmony: ${harmony.progression.join(' → ')} (${harmony.label}). Voice leading now prefers nearest chord tones on strong beats and cadences.`,
   }
 }
