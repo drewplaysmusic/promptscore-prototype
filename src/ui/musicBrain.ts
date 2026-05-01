@@ -34,6 +34,13 @@ type ScaleSystemValue =
 
 type TonalCenterValue = PitchValue
 
+type PlannedDuration = {
+  duration: DurationValue
+  startBeat: number
+  measureIndex: number
+  beatInMeasure: number
+}
+
 export type NoteEvent = {
   duration: DurationValue
   accidental: AccidentalValue
@@ -196,6 +203,40 @@ function getKeySignatureForDisplay(tonalCenter: TonalCenterValue, scaleSystem: S
   if ((scaleSystem === 'natural minor' || scaleSystem === 'aeolian') && tonalCenter === 'A') return 'A minor'
 
   return 'C major'
+}
+
+function getHarmonyChordScaleIndices(harmonyLabel: string): number[] | null {
+  const cleaned = harmonyLabel.replace(/maj|min|m|alt|7|°/g, '')
+
+  if (cleaned === 'none') return null
+  if (cleaned === 'I' || cleaned === 'i') return [0, 2, 4]
+  if (cleaned === 'ii' || cleaned === 'ii°') return [1, 3, 5]
+  if (cleaned === 'iii' || cleaned === 'III') return [2, 4, 6]
+  if (cleaned === 'IV' || cleaned === 'iv') return [3, 5, 0]
+  if (cleaned === 'V' || cleaned === 'v') return [4, 6, 1]
+  if (cleaned === 'vi' || cleaned === 'VI') return [5, 0, 2]
+  if (cleaned === 'vii' || cleaned === 'VII' || cleaned === 'bVII') return [6, 1, 3]
+
+  return null
+}
+
+function getHarmonyLabelForMeasure(harmony: HarmonyPlan, measureIndex: number): string {
+  if (harmony.progression.length === 0) return 'none'
+  return harmony.progression[measureIndex % harmony.progression.length]
+}
+
+function getHarmonyTargetScaleIndex(
+  harmony: HarmonyPlan,
+  measureIndex: number,
+  eventIndex: number,
+  isCadence: boolean,
+): number | null {
+  const label = getHarmonyLabelForMeasure(harmony, measureIndex)
+  const chordIndices = getHarmonyChordScaleIndices(label)
+  if (!chordIndices) return null
+
+  if (isCadence) return chordIndices[0]
+  return chordIndices[eventIndex % chordIndices.length]
 }
 
 function detectTimeSignature(prompt: string, fallback: TimeSignatureValue, style: StyleValue): TimeSignatureValue {
@@ -467,6 +508,7 @@ function buildBeginnerMelodyEvents(
   rhythmPattern: DurationValue[],
   phraseShape: PhraseShapeValue,
   style: StyleValue,
+  harmony: HarmonyPlan,
 ): Omit<NoteEvent, 'measure' | 'beat'>[] {
   const measureBeats = getMeasureBeats(timeSignature)
   const totalBeats = measureCount * measureBeats
@@ -474,31 +516,42 @@ function buildBeginnerMelodyEvents(
   const events: Omit<NoteEvent, 'measure' | 'beat'>[] = []
   let usedBeats = 0
   let eventIndex = 0
-  const plannedDurations: DurationValue[] = []
+  const plannedDurations: PlannedDuration[] = []
 
   while (usedBeats < totalBeats) {
     const patternDuration = rhythmPattern[plannedDurations.length % rhythmPattern.length] || duration
     const durationBeats = getDurationBeats(patternDuration)
     if (usedBeats + durationBeats > totalBeats) break
-    plannedDurations.push(patternDuration)
+
+    plannedDurations.push({
+      duration: patternDuration,
+      startBeat: usedBeats,
+      measureIndex: Math.floor(usedBeats / measureBeats),
+      beatInMeasure: (usedBeats % measureBeats) + 1,
+    })
     usedBeats += durationBeats
   }
 
-  plannedDurations.forEach((patternDuration, i) => {
+  plannedDurations.forEach((plannedDuration, i) => {
     const isLast = i === plannedDurations.length - 1
     const shouldRest = includeRests && !isLast && i > 0 && i % 7 === 0
 
     if (shouldRest) {
-      events.push({ duration: patternDuration, accidental: null, isRest: true, pitch: 'B' })
+      events.push({ duration: plannedDuration.duration, accidental: null, isRest: true, pitch: 'B' })
       eventIndex += 1
       return
     }
 
-    const scaleIndex = isLast ? 0 : getPhraseScaleIndex(eventIndex, plannedDurations.length, phraseShape, style)
+    const contourScaleIndex = isLast ? 0 : getPhraseScaleIndex(eventIndex, plannedDurations.length, phraseShape, style)
+    const isStrongBeat = Math.abs(plannedDuration.beatInMeasure - 1) < 0.001
+    const harmonyScaleIndex = isStrongBeat || isLast
+      ? getHarmonyTargetScaleIndex(harmony, plannedDuration.measureIndex, eventIndex, isLast)
+      : null
+    const scaleIndex = harmonyScaleIndex ?? contourScaleIndex
     const scaleTone = scale[Math.abs(scaleIndex) % scale.length]
 
     events.push({
-      duration: patternDuration,
+      duration: plannedDuration.duration,
       accidental: scaleTone.accidental,
       isRest: false,
       pitch: scaleTone.pitch,
@@ -550,7 +603,7 @@ export function generateMusicBrainResult(promptText: string, defaults: BrainDefa
   const explicitEvents = extractExplicitEvents(promptText, duration, defaults.accidental)
   const shouldGenerateMelody = shouldUseGeneratedMelody(normalizedPrompt, explicitEvents)
   const sourceEvents = shouldGenerateMelody
-    ? buildBeginnerMelodyEvents(normalizedPrompt, scale, duration, timeSignature, measureCount, rhythmPattern, phraseShape, style)
+    ? buildBeginnerMelodyEvents(normalizedPrompt, scale, duration, timeSignature, measureCount, rhythmPattern, phraseShape, style, harmony)
     : explicitEvents
 
   const notes: NoteEvent[] = []
@@ -569,6 +622,6 @@ export function generateMusicBrainResult(promptText: string, defaults: BrainDefa
     timeSignature,
     keySignature,
     harmony,
-    summary: `Generated ${notes.length} events across ${measureCount} measure(s) in ${displayScaleName}, ${timeSignature}, ${style} style, using ${phraseShape} phrase shape and rhythm pattern: ${rhythmPattern.join(' → ')}. Harmony: ${harmony.progression.join(' → ')} (${harmony.label}).`,
+    summary: `Generated ${notes.length} events across ${measureCount} measure(s) in ${displayScaleName}, ${timeSignature}, ${style} style, using ${phraseShape} phrase shape and rhythm pattern: ${rhythmPattern.join(' → ')}. Harmony: ${harmony.progression.join(' → ')} (${harmony.label}). Strong beats now target active chord tones.`,
   }
 }
