@@ -112,19 +112,19 @@ function groupNotesByMeasure(notes: NoteEvent[]): NoteEvent[][] {
 }
 
 function isBeamable(note: NoteEvent): boolean {
-  return !note.isRest && (note.duration === 'Eighth' || note.duration === '16th' || note.duration === 'TripletEighth')
+  return !note.isRest && note.measure > 0 && (note.duration === 'Eighth' || note.duration === '16th' || note.duration === 'TripletEighth')
 }
 
-function getBeamGroupSize(timeSignature: TimeSignatureValue): number {
+function getBeamBoundarySize(timeSignature: TimeSignatureValue): number {
   if (timeSignature === '6/8') return 1.5
   return 1
 }
 
 function getMeterAwareBeams(vexNotes: StaveNote[], notesForMeasure: NoteEvent[], timeSignature: TimeSignatureValue): Beam[] {
   const beams: Beam[] = []
-  const groupSize = getBeamGroupSize(timeSignature)
+  const boundarySize = getBeamBoundarySize(timeSignature)
   let beatCursor = 1
-  let activeGroupIndex: number | null = null
+  let activeGroupBoundary: number | null = null
   let activeGroup: StaveNote[] = []
 
   function flushGroup() {
@@ -135,40 +135,46 @@ function getMeterAwareBeams(vexNotes: StaveNote[], notesForMeasure: NoteEvent[],
   }
 
   notesForMeasure.forEach((note, index) => {
-    const groupIndex = Math.floor((beatCursor - 1) / groupSize)
+    const durationBeats = getDurationBeats(note.duration)
+    const startsBoundary = Math.abs(((beatCursor - 1) / boundarySize) - Math.round((beatCursor - 1) / boundarySize)) < 0.001
+    const groupBoundary = Math.floor((beatCursor - 1) / boundarySize)
+    const crossesBoundary = Math.floor((beatCursor - 1 + durationBeats - 0.001) / boundarySize) !== groupBoundary
+    const isTriplet = note.duration === 'TripletEighth'
 
-    if (activeGroupIndex !== null && groupIndex !== activeGroupIndex) {
+    if (startsBoundary || (activeGroupBoundary !== null && groupBoundary !== activeGroupBoundary) || isTriplet) {
       flushGroup()
     }
 
-    activeGroupIndex = groupIndex
+    activeGroupBoundary = groupBoundary
 
-    if (isBeamable(note)) {
+    if (isBeamable(note) && !crossesBoundary && !isTriplet) {
       activeGroup.push(vexNotes[index])
     } else {
       flushGroup()
     }
 
-    beatCursor += getDurationBeats(note.duration)
+    beatCursor += durationBeats
   })
 
   flushGroup()
   return beams
 }
 
-function getTripletTuplets(vexNotes: StaveNote[], notesForMeasure: NoteEvent[]): Tuplet[] {
+function getTripletTupletsAndBeams(vexNotes: StaveNote[], notesForMeasure: NoteEvent[]): { tuplets: Tuplet[]; beams: Beam[] } {
   const tuplets: Tuplet[] = []
+  const beams: Beam[] = []
   let activeTripletGroup: StaveNote[] = []
 
   function flushTripletGroup() {
     if (activeTripletGroup.length === 3) {
+      beams.push(new Beam(activeTripletGroup))
       tuplets.push(new Tuplet(activeTripletGroup, { num_notes: 3, notes_occupied: 2 }))
     }
     activeTripletGroup = []
   }
 
   notesForMeasure.forEach((note, index) => {
-    if (note.duration === 'TripletEighth' && !note.isRest) {
+    if (note.duration === 'TripletEighth' && !note.isRest && note.measure > 0) {
       activeTripletGroup.push(vexNotes[index])
       if (activeTripletGroup.length === 3) flushTripletGroup()
       return
@@ -178,7 +184,7 @@ function getTripletTuplets(vexNotes: StaveNote[], notesForMeasure: NoteEvent[]):
   })
 
   flushTripletGroup()
-  return tuplets
+  return { tuplets, beams }
 }
 
 export default function ScoreRenderer({
@@ -249,7 +255,8 @@ export default function ScoreRenderer({
         context.restore()
       }
 
-      const measureWithPadding = [...measureNotes, ...getPaddingRests(measureNotes, timeSignature)]
+      const paddingRests = getPaddingRests(measureNotes, timeSignature)
+      const measureWithPadding = [...measureNotes, ...paddingRests]
 
       const vexNotes = measureWithPadding.map((note) => {
         const vexNote = new StaveNote({
@@ -270,8 +277,10 @@ export default function ScoreRenderer({
       voice.setStrict(false)
       voice.addTickables(vexNotes)
 
-      const beams = getMeterAwareBeams(vexNotes, measureWithPadding, timeSignature)
-      const tuplets = getTripletTuplets(vexNotes, measureWithPadding)
+      const normalBeams = getMeterAwareBeams(vexNotes, measureWithPadding, timeSignature)
+      const tripletResult = getTripletTupletsAndBeams(vexNotes, measureWithPadding)
+      const beams = [...normalBeams, ...tripletResult.beams]
+      const tuplets = tripletResult.tuplets
 
       new Formatter().joinVoices([voice]).format([voice], staveWidth - 90)
       voice.draw(context, stave)
