@@ -110,6 +110,51 @@ function groupNotesByMeasure(notes: NoteEvent[]): NoteEvent[][] {
   return groups.filter(Boolean)
 }
 
+function isBeamable(note: NoteEvent): boolean {
+  return !note.isRest && (note.duration === 'Eighth' || note.duration === '16th')
+}
+
+function getBeamGroupSize(timeSignature: TimeSignatureValue): number {
+  if (timeSignature === '6/8') return 1.5
+  return 1
+}
+
+function getMeterAwareBeams(vexNotes: StaveNote[], notesForMeasure: NoteEvent[], timeSignature: TimeSignatureValue): Beam[] {
+  const beams: Beam[] = []
+  const groupSize = getBeamGroupSize(timeSignature)
+  let beatCursor = 1
+  let activeGroupIndex: number | null = null
+  let activeGroup: StaveNote[] = []
+
+  function flushGroup() {
+    if (activeGroup.length >= 2) {
+      beams.push(new Beam(activeGroup))
+    }
+    activeGroup = []
+  }
+
+  notesForMeasure.forEach((note, index) => {
+    const groupIndex = Math.floor((beatCursor - 1) / groupSize)
+
+    if (activeGroupIndex !== null && groupIndex !== activeGroupIndex) {
+      flushGroup()
+    }
+
+    activeGroupIndex = groupIndex
+
+    if (isBeamable(note)) {
+      activeGroup.push(vexNotes[index])
+    } else {
+      flushGroup()
+    }
+
+    beatCursor += getDurationBeats(note.duration)
+  })
+
+  flushGroup()
+  return beams
+}
+
 export default function ScoreRenderer({
   notes,
   timeSignature,
@@ -199,7 +244,7 @@ export default function ScoreRenderer({
       voice.setStrict(false)
       voice.addTickables(vexNotes)
 
-      const beams = Beam.generateBeams(vexNotes)
+      const beams = getMeterAwareBeams(vexNotes, measureWithPadding, timeSignature)
 
       new Formatter().joinVoices([voice]).format([voice], staveWidth - 90)
       voice.draw(context, stave)
