@@ -231,6 +231,28 @@ function getNearestChordScaleIndex(
   }, chordScaleIndices[0])
 }
 
+function getPassingToneScaleIndex(
+  scale: ScaleTone[],
+  previousScaleIndex: number | null,
+  targetScaleIndex: number,
+): number {
+  if (previousScaleIndex === null) return targetScaleIndex
+
+  const previousSemitone = getScaleToneSemitone(scale, previousScaleIndex)
+  const targetSemitone = getScaleToneSemitone(scale, targetScaleIndex)
+  const directDistance = Math.abs(targetSemitone - previousSemitone)
+
+  if (directDistance <= 2) return targetScaleIndex
+
+  const scaleLength = scale.length
+  const stepUp = (previousScaleIndex + 1 + scaleLength) % scaleLength
+  const stepDown = (previousScaleIndex - 1 + scaleLength) % scaleLength
+  const upDistance = Math.abs(getScaleToneSemitone(scale, stepUp) - targetSemitone)
+  const downDistance = Math.abs(getScaleToneSemitone(scale, stepDown) - targetSemitone)
+
+  return upDistance <= downDistance ? stepUp : stepDown
+}
+
 function getHarmonyChordScaleIndices(harmonyLabel: string): number[] | null {
   const cleaned = harmonyLabel.replace(/maj|min|m|alt|7|°/g, '')
 
@@ -576,7 +598,7 @@ function buildBeginnerMelodyEvents(
     const harmonyScaleIndex = isStrongBeat || isLast
       ? getHarmonyTargetScaleIndex(scale, harmony, plannedDuration.measureIndex, eventIndex, isLast, previousScaleIndex)
       : null
-    const scaleIndex = harmonyScaleIndex ?? contourScaleIndex
+    const scaleIndex = harmonyScaleIndex ?? getPassingToneScaleIndex(scale, previousScaleIndex, contourScaleIndex)
     const scaleTone = scale[Math.abs(scaleIndex) % scale.length]
 
     events.push({
@@ -652,6 +674,6 @@ export function generateMusicBrainResult(promptText: string, defaults: BrainDefa
     timeSignature,
     keySignature,
     harmony,
-    summary: `Generated ${notes.length} events across ${measureCount} measure(s) in ${displayScaleName}, ${timeSignature}, ${style} style, using ${phraseShape} phrase shape and rhythm pattern: ${rhythmPattern.join(' → ')}. Harmony: ${harmony.progression.join(' → ')} (${harmony.label}). Voice leading now prefers nearest chord tones on strong beats and cadences.`,
+    summary: `Generated ${notes.length} events across ${measureCount} measure(s) in ${displayScaleName}, ${timeSignature}, ${style} style, using ${phraseShape} phrase shape and rhythm pattern: ${rhythmPattern.join(' → ')}. Harmony: ${harmony.progression.join(' → ')} (${harmony.label}). Strong beats target nearest chord tones; weak beats now use passing tones toward the next contour target.`,
   }
 }
