@@ -1,3 +1,5 @@
+import { generateHarmonyPlan, type HarmonyPlan } from './harmonyBrain'
+
 export type DurationValue = 'Whole' | 'Half' | 'Quarter' | 'Eighth' | '16th'
 export type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
 export type PitchValue = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B'
@@ -51,6 +53,7 @@ export type MusicBrainResult = {
   notes: NoteEvent[]
   timeSignature: TimeSignatureValue
   keySignature: KeySignatureValue
+  harmony: HarmonyPlan
   summary: string
 }
 
@@ -537,6 +540,7 @@ export function generateMusicBrainResult(promptText: string, defaults: BrainDefa
   const tonalCenter = detectTonalCenter(normalizedPrompt, style === 'folk' ? 'A' : 'C')
   const displayScaleName = getDisplayScaleName(tonalCenter, scaleSystem)
   const scale = getScaleTones(tonalCenter, scaleSystem)
+  const harmony = generateHarmonyPlan(promptText, style, scaleSystem)
   const timeSignature = detectTimeSignature(normalizedPrompt, defaults.timeSignature, style)
   const duration = detectDuration(normalizedPrompt, defaults.duration, style)
   const keySignature = getKeySignatureForDisplay(tonalCenter, scaleSystem)
@@ -564,6 +568,7 @@ export function generateMusicBrainResult(promptText: string, defaults: BrainDefa
     notes,
     timeSignature,
     keySignature,
-    summary: `Generated ${notes.length} events across ${measureCount} measure(s) in ${displayScaleName}, ${timeSignature}, ${style} style, using ${phraseShape} phrase shape and rhythm pattern: ${rhythmPattern.join(' → ')}.`,
+    harmony,
+    summary: `Generated ${notes.length} events across ${measureCount} measure(s) in ${displayScaleName}, ${timeSignature}, ${style} style, using ${phraseShape} phrase shape and rhythm pattern: ${rhythmPattern.join(' → ')}. Harmony: ${harmony.progression.join(' → ')} (${harmony.label}).`,
   }
 }
