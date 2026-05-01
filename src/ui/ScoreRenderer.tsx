@@ -114,10 +114,14 @@ export default function ScoreRenderer({
   notes,
   timeSignature,
   keySignature,
+  harmonyProgression = [],
+  showHarmonyOverlay = false,
 }: {
   notes: NoteEvent[]
   timeSignature: TimeSignatureValue
   keySignature: KeySignatureValue
+  harmonyProgression?: string[]
+  showHarmonyOverlay?: boolean
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [zoom, setZoom] = useState(0.9)
@@ -134,8 +138,8 @@ export default function ScoreRenderer({
     const pageWidth = 900
     const pageHeight = 1160
     const leftMargin = 56
-    const topMargin = 80
-    const systemGap = 150
+    const topMargin = 90
+    const systemGap = 160
     const measuresPerSystem = 2
 
     const renderer = new Renderer(container, Renderer.Backends.SVG)
@@ -166,6 +170,14 @@ export default function ScoreRenderer({
 
       stave.setContext(context).draw()
 
+      if (showHarmonyOverlay && harmonyProgression.length > 0) {
+        const harmonyLabel = harmonyProgression[measureIndex % harmonyProgression.length]
+        context.save()
+        context.setFont('Arial', 15, 'bold')
+        context.fillText(harmonyLabel, x + 18, y - 12)
+        context.restore()
+      }
+
       const measureWithPadding = [...measureNotes, ...getPaddingRests(measureNotes, timeSignature)]
 
       const vexNotes = measureWithPadding.map((note) => {
@@ -190,7 +202,7 @@ export default function ScoreRenderer({
       new Formatter().joinVoices([voice]).format([voice], staveWidth - 90)
       voice.draw(context, stave)
     })
-  }, [notes, timeSignature, keySignature])
+  }, [notes, timeSignature, keySignature, harmonyProgression, showHarmonyOverlay])
 
   return (
     <div
@@ -215,7 +227,7 @@ export default function ScoreRenderer({
         }}
       >
         <div style={{ fontSize: 12, fontWeight: 700, color: '#71717a', textTransform: 'uppercase' }}>
-          Score Page View · {keySignature}
+          Score Page View · {keySignature}{showHarmonyOverlay ? ' · Harmony Overlay' : ''}
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
