@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Accidental as VFAccidental, Formatter, Renderer, Stave, StaveNote, Voice } from 'vexflow'
+import { Accidental as VFAccidental, Beam, Formatter, Renderer, Stave, StaveNote, Voice } from 'vexflow'
 
 type DurationValue = 'Whole' | 'Half' | 'Quarter' | 'Eighth' | '16th'
 type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
@@ -79,7 +79,7 @@ function getPaddingRests(measureNotes: NoteEvent[], timeSignature: TimeSignature
   let remainingBeats = Math.max(0, getMeasureBeats(timeSignature) - usedBeats)
   const paddingRests: NoteEvent[] = []
 
-  while (remainingBeats > 0) {
+  while (remainingBeats > 0.001) {
     const duration = getLargestRestDuration(remainingBeats)
     const durationBeats = getDurationBeats(duration)
 
@@ -199,8 +199,13 @@ export default function ScoreRenderer({
       voice.setStrict(false)
       voice.addTickables(vexNotes)
 
+      const beams = Beam.generateBeams(vexNotes)
+
       new Formatter().joinVoices([voice]).format([voice], staveWidth - 90)
       voice.draw(context, stave)
+      beams.forEach((beam) => {
+        beam.setContext(context).draw()
+      })
     })
   }, [notes, timeSignature, keySignature, harmonyProgression, showHarmonyOverlay])
 
