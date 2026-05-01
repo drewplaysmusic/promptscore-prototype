@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Accidental as VFAccidental, Beam, Formatter, Renderer, Stave, StaveNote, Tuplet, Voice } from 'vexflow'
+import { Accidental as VFAccidental, Beam, Dot, Formatter, Renderer, Stave, StaveNote, Tuplet, Voice } from 'vexflow'
 
-type DurationValue = 'Whole' | 'Half' | 'Quarter' | 'Eighth' | '16th' | 'TripletEighth'
+type DurationValue = 'Whole' | 'DottedHalf' | 'Half' | 'DottedQuarter' | 'Quarter' | 'DottedEighth' | 'Eighth' | '16th' | 'TripletEighth'
 type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
 type PitchValue = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B'
 type TimeSignatureValue = '4/4' | '3/4' | '2/4' | '6/8'
@@ -16,19 +16,34 @@ type NoteEvent = {
   beat: number
 }
 
+function isDottedDuration(duration: DurationValue): boolean {
+  return duration === 'DottedHalf' || duration === 'DottedQuarter' || duration === 'DottedEighth'
+}
+
+function getUndottedDuration(duration: DurationValue): DurationValue {
+  if (duration === 'DottedHalf') return 'Half'
+  if (duration === 'DottedQuarter') return 'Quarter'
+  if (duration === 'DottedEighth') return 'Eighth'
+  return duration
+}
+
 function getVexDuration(duration: DurationValue, isRest: boolean): string {
   const suffix = isRest ? 'r' : ''
-  if (duration === 'Whole') return `w${suffix}`
-  if (duration === 'Half') return `h${suffix}`
-  if (duration === 'Quarter') return `q${suffix}`
-  if (duration === 'Eighth' || duration === 'TripletEighth') return `8${suffix}`
+  const baseDuration = getUndottedDuration(duration)
+  if (baseDuration === 'Whole') return `w${suffix}`
+  if (baseDuration === 'Half') return `h${suffix}`
+  if (baseDuration === 'Quarter') return `q${suffix}`
+  if (baseDuration === 'Eighth' || baseDuration === 'TripletEighth') return `8${suffix}`
   return `16${suffix}`
 }
 
 function getDurationBeats(duration: DurationValue): number {
   if (duration === 'Whole') return 4
+  if (duration === 'DottedHalf') return 3
   if (duration === 'Half') return 2
+  if (duration === 'DottedQuarter') return 1.5
   if (duration === 'Quarter') return 1
+  if (duration === 'DottedEighth') return 0.75
   if (duration === 'Eighth') return 0.5
   if (duration === 'TripletEighth') return 1 / 3
   return 0.25
@@ -69,8 +84,11 @@ function getVoiceConfig(timeSignature: TimeSignatureValue): { num_beats: number;
 
 function getLargestRestDuration(remainingBeats: number): DurationValue {
   if (remainingBeats >= 4) return 'Whole'
+  if (remainingBeats >= 3) return 'DottedHalf'
   if (remainingBeats >= 2) return 'Half'
+  if (remainingBeats >= 1.5) return 'DottedQuarter'
   if (remainingBeats >= 1) return 'Quarter'
+  if (remainingBeats >= 0.75) return 'DottedEighth'
   if (remainingBeats >= 0.5) return 'Eighth'
   return '16th'
 }
@@ -112,7 +130,7 @@ function groupNotesByMeasure(notes: NoteEvent[]): NoteEvent[][] {
 }
 
 function isBeamable(note: NoteEvent): boolean {
-  return !note.isRest && note.measure > 0 && (note.duration === 'Eighth' || note.duration === '16th' || note.duration === 'TripletEighth')
+  return !note.isRest && note.measure > 0 && (note.duration === 'Eighth' || note.duration === 'DottedEighth' || note.duration === '16th' || note.duration === 'TripletEighth')
 }
 
 function getBeamBoundarySize(timeSignature: TimeSignatureValue): number {
@@ -282,6 +300,10 @@ export default function ScoreRenderer({
 
         if (!note.isRest && accidental) {
           vexNote.addModifier(new VFAccidental(accidental), 0)
+        }
+
+        if (isDottedDuration(note.duration)) {
+          Dot.buildAndAttach([vexNote])
         }
 
         return vexNote
