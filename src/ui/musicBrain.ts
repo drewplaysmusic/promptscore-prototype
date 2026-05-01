@@ -1,5 +1,8 @@
 import { generateHarmonyPlan, type HarmonyPlan } from './harmonyBrain'
-
+import {
+  isScaleExercisePrompt,
+  generateScaleExercise,
+} from './exerciseBrain'
 export type DurationValue = 'Whole' | 'Half' | 'Quarter' | 'Eighth' | '16th'
 export type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
 export type PitchValue = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B'
@@ -639,6 +642,21 @@ function placeEventAtCursor(event: Omit<NoteEvent, 'measure' | 'beat'>, cursor: 
 }
 
 export function generateMusicBrainResult(promptText: string, defaults: BrainDefaults): MusicBrainResult {
+  if (isScaleExercisePrompt(promptText)) {
+    const exercise = generateScaleExercise(promptText)
+
+    return {
+      notes: exercise.notes,
+      timeSignature: exercise.timeSignature,
+      keySignature: 'C major',
+      harmony: {
+        progression: [],
+        label: 'exercise',
+        description: 'Scale exercise mode.',
+      },
+      summary: exercise.summary,
+    }
+  }
   const normalizedPrompt = normalizePrompt(promptText)
   const style = detectStyle(normalizedPrompt)
   const scaleSystem = detectScaleSystem(normalizedPrompt, style)
