@@ -78,6 +78,45 @@ export type RhythmDuration = {
   }
 }
 
+export type RatioGrid = {
+  actualNotes: number
+  normalNotes: number
+  spanPulses: number
+  startPulse: number
+  measure?: number
+  label?: string
+}
+
+export type RatioRhythmEvent = {
+  id: string
+  measure: number
+  pulse: number
+  indexInRatio: number
+  startTick: number
+  durationTicks: number
+  endTick: number
+  startMs: number
+  durationMs: number
+  endMs: number
+  startX: number
+  endX: number
+  y: number
+  ratioLabel: string
+  groupId: string
+  beamGroupId: string
+  bracketGroupId?: string
+  actualNotes: number
+  normalNotes: number
+  spanPulses: number
+}
+
+export type RatioGridResult = {
+  measureGrid: MeasureGrid
+  ratio: RatioGrid
+  events: RatioRhythmEvent[]
+  summary: string
+}
+
 export type RhythmEventInput = {
   duration: RhythmDuration
   intent?: RhythmIntent
@@ -324,6 +363,55 @@ function shouldSplitAcrossPulse(grid: MeasureGrid, startTick: number, endTick: n
   const startPulse = getPulseFromTick(grid, startTick)
   const endPulse = getPulseFromTick(grid, Math.max(startTick, endTick - 0.001))
   return startPulse.pulse !== endPulse.pulse
+}
+
+export function createRatioGridEvents(config: PulseGridConfig, ratio: RatioGrid): RatioGridResult {
+  const measure = ratio.measure ?? 1
+  const measureGrid = createMeasureGrid(config, measure)
+  const startPulseIndex = Math.max(0, ratio.startPulse - 1)
+  const spanPulses = Math.max(1, ratio.spanPulses)
+  const startTick = startPulseIndex * measureGrid.ticksPerPulse
+  const spanTicks = spanPulses * measureGrid.ticksPerPulse
+  const durationTicks = spanTicks / ratio.actualNotes
+  const ratioLabel = ratio.label ?? `${ratio.actualNotes}:${ratio.normalNotes}`
+  const groupId = `m${measure}-p${ratio.startPulse}-ratio-${ratio.actualNotes}-${ratio.normalNotes}`
+  const bracketGroupId = `${groupId}-bracket`
+
+  const events: RatioRhythmEvent[] = Array.from({ length: ratio.actualNotes }, (_, index) => {
+    const eventStartTick = startTick + durationTicks * index
+    const eventEndTick = eventStartTick + durationTicks
+    const pulse = getPulseFromTick(measureGrid, eventStartTick)
+
+    return {
+      id: `${groupId}-e${index}`,
+      measure,
+      pulse: pulse.pulse,
+      indexInRatio: index,
+      startTick: eventStartTick,
+      durationTicks,
+      endTick: eventEndTick,
+      startMs: tickToMs(measureGrid, eventStartTick),
+      durationMs: tickToMs(measureGrid, durationTicks),
+      endMs: tickToMs(measureGrid, eventEndTick),
+      startX: tickToX(measureGrid, eventStartTick),
+      endX: tickToX(measureGrid, eventEndTick),
+      y: 0,
+      ratioLabel,
+      groupId,
+      beamGroupId: groupId,
+      bracketGroupId,
+      actualNotes: ratio.actualNotes,
+      normalNotes: ratio.normalNotes,
+      spanPulses,
+    }
+  })
+
+  return {
+    measureGrid,
+    ratio,
+    events,
+    summary: `${ratioLabel} ratio grid: ${ratio.actualNotes} attack(s) across ${spanPulses} pulse(s), starting at pulse ${ratio.startPulse}.`,
+  }
 }
 
 export function placeRhythmEvents(config: PulseGridConfig, inputs: RhythmEventInput[], measure = 1): RhythmGridResult {
