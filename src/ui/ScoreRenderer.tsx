@@ -244,12 +244,12 @@ export default function ScoreRenderer({
 
     const measureGroups = groupNotesByMeasure(notes)
 
-    const pageWidth = 980
-    const pageHeight = 1080
-    const leftMargin = 40
-    const topMargin = 72
-    const systemGap = 145
-    const measuresPerSystem = 2
+    const pageWidth = 1180
+    const pageHeight = 760
+    const leftMargin = 36
+    const topMargin = 64
+    const systemGap = 132
+    const measuresPerSystem = 3
 
     const renderer = new Renderer(container, Renderer.Backends.SVG)
     renderer.resize(pageWidth, pageHeight)
@@ -262,9 +262,9 @@ export default function ScoreRenderer({
       const measureInSystem = measureIndex % measuresPerSystem
 
       const y = topMargin + systemIndex * systemGap
-      const x = leftMargin + measureInSystem * 440
+      const x = leftMargin + measureInSystem * 372
       const isFirstMeasureOfSystem = measureInSystem === 0
-      const staveWidth = 440
+      const staveWidth = 372
 
       const stave = new Stave(x, y, staveWidth)
 
@@ -318,7 +318,7 @@ export default function ScoreRenderer({
       const beams = [...normalBeams, ...tripletResult.beams]
       const tuplets = tripletResult.tuplets
 
-      new Formatter().joinVoices([voice]).format([voice], staveWidth - 100)
+      new Formatter().joinVoices([voice]).format([voice], staveWidth - 92)
       voice.draw(context, stave)
       beams.forEach((beam) => {
         beam.setContext(context).draw()
@@ -332,17 +332,17 @@ export default function ScoreRenderer({
   return (
     <div
       style={{
-        marginTop: 18,
+        marginTop: 16,
         width: '100%',
         border: '1px solid #d4d4d8',
         borderRadius: 14,
-        background: '#e5e7eb',
+        background: '#f8fafc',
         overflow: 'hidden',
       }}
     >
       <div
         style={{
-          height: 40,
+          height: 38,
           borderBottom: '1px solid #d4d4d8',
           background: '#ffffff',
           display: 'flex',
@@ -352,15 +352,15 @@ export default function ScoreRenderer({
         }}
       >
         <div style={{ fontSize: 12, fontWeight: 700, color: '#71717a', textTransform: 'uppercase' }}>
-          Score Page View · {keySignature}{showHarmonyOverlay ? ' · Harmony Overlay' : ''}
+          Score Timeline · {keySignature}{showHarmonyOverlay ? ' · Harmony Overlay' : ''}
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button type="button" onClick={() => setZoom((z) => Math.max(0.65, z - 0.1))}>
+          <button type="button" onClick={() => setZoom((z) => Math.max(0.75, z - 0.1))}>
             −
           </button>
           <span style={{ fontSize: 13 }}>{Math.round(zoom * 100)}%</span>
-          <button type="button" onClick={() => setZoom((z) => Math.min(1.8, z + 0.1))}>
+          <button type="button" onClick={() => setZoom((z) => Math.min(1.6, z + 0.1))}>
             +
           </button>
           <button type="button" onClick={() => setZoom(1)}>
@@ -371,28 +371,27 @@ export default function ScoreRenderer({
 
       <div
         style={{
-          minHeight: 560,
-          maxHeight: 700,
+          minHeight: 500,
+          maxHeight: 620,
           overflow: 'auto',
-          padding: 12,
-          display: 'grid',
-          placeItems: 'start center',
+          padding: 0,
+          background: 'linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%)',
         }}
       >
         <div
           style={{
-            width: 980,
-            minHeight: 1080,
-            background: '#ffffff',
-            boxShadow: '0 14px 36px rgba(15, 23, 42, 0.16)',
+            width: 1180,
+            minHeight: 760,
+            background: 'transparent',
+            boxShadow: 'none',
             transform: `scale(${zoom})`,
-            transformOrigin: 'top center',
-            padding: '24px 18px',
+            transformOrigin: 'top left',
+            padding: '6px 8px 24px',
           }}
         >
           {notes.length === 0 ? (
             <div style={{ color: '#71717a', textAlign: 'center', paddingTop: 120 }}>
-              Add notes to render the score page.
+              Add notes to render the score timeline.
             </div>
           ) : (
             <div ref={containerRef} />
