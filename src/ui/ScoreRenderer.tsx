@@ -233,7 +233,7 @@ export default function ScoreRenderer({
   showHarmonyOverlay?: boolean
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const [zoom, setZoom] = useState(0.9)
+  const [zoom, setZoom] = useState(1)
 
   useEffect(() => {
     const container = containerRef.current
@@ -244,11 +244,11 @@ export default function ScoreRenderer({
 
     const measureGroups = groupNotesByMeasure(notes)
 
-    const pageWidth = 900
-    const pageHeight = 1160
-    const leftMargin = 56
-    const topMargin = 90
-    const systemGap = 160
+    const pageWidth = 980
+    const pageHeight = 1080
+    const leftMargin = 40
+    const topMargin = 72
+    const systemGap = 145
     const measuresPerSystem = 2
 
     const renderer = new Renderer(container, Renderer.Backends.SVG)
@@ -262,9 +262,9 @@ export default function ScoreRenderer({
       const measureInSystem = measureIndex % measuresPerSystem
 
       const y = topMargin + systemIndex * systemGap
-      const x = leftMargin + measureInSystem * 340
+      const x = leftMargin + measureInSystem * 440
       const isFirstMeasureOfSystem = measureInSystem === 0
-      const staveWidth = 340
+      const staveWidth = 440
 
       const stave = new Stave(x, y, staveWidth)
 
@@ -318,7 +318,7 @@ export default function ScoreRenderer({
       const beams = [...normalBeams, ...tripletResult.beams]
       const tuplets = tripletResult.tuplets
 
-      new Formatter().joinVoices([voice]).format([voice], staveWidth - 90)
+      new Formatter().joinVoices([voice]).format([voice], staveWidth - 100)
       voice.draw(context, stave)
       beams.forEach((beam) => {
         beam.setContext(context).draw()
@@ -332,7 +332,7 @@ export default function ScoreRenderer({
   return (
     <div
       style={{
-        marginTop: 24,
+        marginTop: 18,
         width: '100%',
         border: '1px solid #d4d4d8',
         borderRadius: 14,
@@ -342,7 +342,7 @@ export default function ScoreRenderer({
     >
       <div
         style={{
-          height: 44,
+          height: 40,
           borderBottom: '1px solid #d4d4d8',
           background: '#ffffff',
           display: 'flex',
@@ -356,14 +356,14 @@ export default function ScoreRenderer({
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button type="button" onClick={() => setZoom((z) => Math.max(0.5, z - 0.1))}>
+          <button type="button" onClick={() => setZoom((z) => Math.max(0.65, z - 0.1))}>
             −
           </button>
           <span style={{ fontSize: 13 }}>{Math.round(zoom * 100)}%</span>
-          <button type="button" onClick={() => setZoom((z) => Math.min(1.6, z + 0.1))}>
+          <button type="button" onClick={() => setZoom((z) => Math.min(1.8, z + 0.1))}>
             +
           </button>
-          <button type="button" onClick={() => setZoom(0.9)}>
+          <button type="button" onClick={() => setZoom(1)}>
             Fit
           </button>
         </div>
@@ -371,23 +371,23 @@ export default function ScoreRenderer({
 
       <div
         style={{
-          minHeight: 520,
-          maxHeight: 620,
+          minHeight: 560,
+          maxHeight: 700,
           overflow: 'auto',
-          padding: 32,
+          padding: 12,
           display: 'grid',
           placeItems: 'start center',
         }}
       >
         <div
           style={{
-            width: 900,
-            minHeight: 1160,
+            width: 980,
+            minHeight: 1080,
             background: '#ffffff',
-            boxShadow: '0 20px 50px rgba(15, 23, 42, 0.18)',
+            boxShadow: '0 14px 36px rgba(15, 23, 42, 0.16)',
             transform: `scale(${zoom})`,
             transformOrigin: 'top center',
-            padding: '48px 36px',
+            padding: '24px 18px',
           }}
         >
           {notes.length === 0 ? (
