@@ -491,28 +491,15 @@ export default function PromptScoreShell() {
             style={{
               border: '1px dashed #cbd5e1',
               borderRadius: 14,
-              background: 'linear-gradient(180deg, #ffffff 0%, #fafafa 100%)',
+              background: '#ffffff',
               minHeight: 420,
+              height: '100%',
               cursor: mode === 'compose' ? 'pointer' : 'default',
               minWidth: 0,
               overflow: 'hidden',
             }}
           >
-            <div style={{ textAlign: 'center', width: '100%', padding: 16, boxSizing: 'border-box' }}>
-              <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Score Canvas</div>
-              <div style={{ color: '#52525b', lineHeight: 1.5 }}>
-                This central area becomes the notation surface, exercise view, Rhythm mode exercise area, or playback-follow score depending on the active workspace.
-              </div>
-
-              {mode === 'compose' ? (
-                <div style={{ marginTop: 18, color: '#111827', fontSize: 14 }}>
-                  Current entry will place a <strong>{restMode ? 'rest' : selectedPitch + ' ' + selectedDuration.toLowerCase() + ' note'}</strong>
-                  {restMode ? '' : selectedAccidental ? ` with ${selectedAccidental.toLowerCase()}` : ''} at <strong>M{currentMeasure} B{currentBeat}</strong> in <strong>{timeSignature}</strong>.
-                </div>
-              ) : null}
-
-              <ScoreRenderer notes={notes} timeSignature={timeSignature} keySignature={keySignature} />
-            </div>
+            <ScoreRenderer notes={notes} timeSignature={timeSignature} keySignature={keySignature} />
           </div>
         </section>
 
