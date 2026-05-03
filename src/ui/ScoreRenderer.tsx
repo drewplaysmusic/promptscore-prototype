@@ -5,7 +5,11 @@ type DurationValue = 'Whole' | 'DottedHalf' | 'Half' | 'DottedQuarter' | 'Quarte
 type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
 type PitchValue = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B'
 type TimeSignatureValue = '4/4' | '3/4' | '2/4' | '6/8'
-type KeySignatureValue = 'C major' | 'G major' | 'F major' | 'D major' | 'A minor'
+type KeySignatureValue =
+  | 'C major' | 'G major' | 'D major' | 'A major' | 'E major' | 'B major' | 'F# major' | 'C# major'
+  | 'F major' | 'Bb major' | 'Eb major' | 'Ab major' | 'Db major' | 'Gb major' | 'Cb major'
+  | 'A minor' | 'E minor' | 'B minor' | 'F# minor' | 'C# minor' | 'G# minor' | 'D# minor' | 'A# minor'
+  | 'D minor' | 'G minor' | 'C minor' | 'F minor' | 'Bb minor' | 'Eb minor' | 'Ab minor'
 
 type NoteEvent = {
   duration: DurationValue
@@ -61,11 +65,40 @@ function getVexKey(note: NoteEvent): string {
 }
 
 function getVexKeySignature(keySignature: KeySignatureValue): string {
-  if (keySignature === 'G major') return 'G'
-  if (keySignature === 'F major') return 'F'
-  if (keySignature === 'D major') return 'D'
-  if (keySignature === 'A minor') return 'Am'
-  return 'C'
+  const keyMap: Record<KeySignatureValue, string> = {
+    'C major': 'C',
+    'G major': 'G',
+    'D major': 'D',
+    'A major': 'A',
+    'E major': 'E',
+    'B major': 'B',
+    'F# major': 'F#',
+    'C# major': 'C#',
+    'F major': 'F',
+    'Bb major': 'Bb',
+    'Eb major': 'Eb',
+    'Ab major': 'Ab',
+    'Db major': 'Db',
+    'Gb major': 'Gb',
+    'Cb major': 'Cb',
+    'A minor': 'Am',
+    'E minor': 'Em',
+    'B minor': 'Bm',
+    'F# minor': 'F#m',
+    'C# minor': 'C#m',
+    'G# minor': 'G#m',
+    'D# minor': 'D#m',
+    'A# minor': 'A#m',
+    'D minor': 'Dm',
+    'G minor': 'Gm',
+    'C minor': 'Cm',
+    'F minor': 'Fm',
+    'Bb minor': 'Bbm',
+    'Eb minor': 'Ebm',
+    'Ab minor': 'Abm',
+  }
+
+  return keyMap[keySignature] || 'C'
 }
 
 function getMeasureBeats(timeSignature: TimeSignatureValue): number {
