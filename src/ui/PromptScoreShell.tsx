@@ -2,8 +2,17 @@ import React, { useState } from 'react'
 import ScoreRenderer from './ScoreRenderer'
 import { generateMusicBrainResult } from './musicBrain'
 
-type WorkspaceMode = 'compose' | 'learn' | 'brain' | 'playback'
-type DurationValue = 'Whole' | 'Half' | 'Quarter' | 'Eighth' | '16th'
+type WorkspaceMode = 'compose' | 'learn' | 'rhythm' | 'playback'
+type DurationValue =
+  | 'Whole'
+  | 'DottedHalf'
+  | 'Half'
+  | 'DottedQuarter'
+  | 'Quarter'
+  | 'DottedEighth'
+  | 'Eighth'
+  | 'TripletEighth'
+  | '16th'
 type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
 type PitchValue = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B'
 type TimeSignatureValue = '4/4' | '3/4' | '2/4' | '6/8'
@@ -31,7 +40,7 @@ type PaletteGroup = {
 const MODE_LABELS: Record<WorkspaceMode, string> = {
   compose: 'Compose',
   learn: 'Learn',
-  brain: 'Brain',
+  rhythm: 'Rhythm',
   playback: 'Playback',
 }
 
@@ -82,13 +91,14 @@ const PALETTE_BY_MODE: Record<WorkspaceMode, PaletteGroup[]> = {
       ],
     },
   ],
-  brain: [
+  rhythm: [
     {
-      title: 'Generate',
+      title: 'Rhythm Mode',
       items: [
-        { label: 'Prompt', glyph: '✦' },
-        { label: 'Regenerate', glyph: '↻' },
-        { label: 'Compare', glyph: '⇄' },
+        { label: 'Rhythm Prompt', glyph: '♩' },
+        { label: 'Dotted Rhythm', glyph: '♩.' },
+        { label: 'Triplets', glyph: '3' },
+        { label: 'Snare / 1-Line', glyph: '—' },
       ],
     },
   ],
@@ -107,31 +117,19 @@ const PALETTE_BY_MODE: Record<WorkspaceMode, PaletteGroup[]> = {
 const INSPECTOR_BY_MODE: Record<WorkspaceMode, string[]> = {
   compose: ['Selected note properties', 'Measure settings', 'Staff / instrument settings'],
   learn: ['Exercise instructions', 'Hints', 'Progress feedback'],
-  brain: ['Music Brain v1', 'Prompt parsing', 'Generation summary'],
+  rhythm: ['Rhythm prompt parsing', 'Dotted / triplet options', 'Future 1-line staff mode'],
   playback: ['Playback settings', 'Loop points', 'Tempo'],
-}
-
-function getDurationGlyph(duration: DurationValue): string {
-  if (duration === 'Whole') return '𝅝'
-  if (duration === 'Half') return '𝅗𝅥'
-  if (duration === 'Quarter') return '♩'
-  if (duration === 'Eighth') return '♪'
-  return '♬'
-}
-
-function getDurationWidth(duration: DurationValue): number {
-  if (duration === 'Whole') return 88
-  if (duration === 'Half') return 72
-  if (duration === 'Quarter') return 56
-  if (duration === 'Eighth') return 46
-  return 40
 }
 
 function getDurationBeats(duration: DurationValue): number {
   if (duration === 'Whole') return 4
+  if (duration === 'DottedHalf') return 3
   if (duration === 'Half') return 2
+  if (duration === 'DottedQuarter') return 1.5
   if (duration === 'Quarter') return 1
+  if (duration === 'DottedEighth') return 0.75
   if (duration === 'Eighth') return 0.5
+  if (duration === 'TripletEighth') return 1 / 3
   return 0.25
 }
 
@@ -140,27 +138,6 @@ function getMeasureBeats(timeSignature: TimeSignatureValue): number {
   if (timeSignature === '2/4') return 2
   if (timeSignature === '6/8') return 3
   return 4
-}
-
-function getAccidentalGlyph(accidental: AccidentalValue): string {
-  if (accidental === 'Sharp') return '♯'
-  if (accidental === 'Flat') return '♭'
-  if (accidental === 'Natural') return '♮'
-  return ''
-}
-
-function getPitchOffset(pitch: PitchValue): number {
-  const offsets: Record<PitchValue, number> = {
-    C: 42,
-    D: 34,
-    E: 26,
-    F: 18,
-    G: 10,
-    A: 2,
-    B: -6,
-  }
-
-  return offsets[pitch]
 }
 
 function isPitchValue(value: string): value is PitchValue {
@@ -396,7 +373,7 @@ export default function PromptScoreShell() {
       <main
         style={{
           display: 'grid',
-          gridTemplateColumns: '260px 1fr 300px',
+          gridTemplateColumns: '260px minmax(0, 1fr) 300px',
           gap: 16,
           padding: 16,
         }}
@@ -425,6 +402,7 @@ export default function PromptScoreShell() {
             display: 'grid',
             gridTemplateRows: 'auto auto 1fr',
             gap: 16,
+            minWidth: 0,
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
@@ -514,16 +492,16 @@ export default function PromptScoreShell() {
               border: '1px dashed #cbd5e1',
               borderRadius: 14,
               background: 'linear-gradient(180deg, #ffffff 0%, #fafafa 100%)',
-              display: 'grid',
-              placeItems: 'center',
               minHeight: 420,
               cursor: mode === 'compose' ? 'pointer' : 'default',
+              minWidth: 0,
+              overflow: 'hidden',
             }}
           >
-            <div style={{ textAlign: 'center', width: '100%', maxWidth: 720, padding: 16 }}>
+            <div style={{ textAlign: 'center', width: '100%', padding: 16, boxSizing: 'border-box' }}>
               <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Score Canvas</div>
               <div style={{ color: '#52525b', lineHeight: 1.5 }}>
-                This central area becomes the notation surface, exercise view, Brain mode candidate area, or playback-follow score depending on the active workspace.
+                This central area becomes the notation surface, exercise view, Rhythm mode exercise area, or playback-follow score depending on the active workspace.
               </div>
 
               {mode === 'compose' ? (
@@ -534,92 +512,6 @@ export default function PromptScoreShell() {
               ) : null}
 
               <ScoreRenderer notes={notes} timeSignature={timeSignature} keySignature={keySignature} />
-
-              {notes.length > 0 && (
-                <div
-                  style={{
-                    margin: '28px auto 0',
-                    position: 'relative',
-                    width: '100%',
-                    maxWidth: 660,
-                    minHeight: 180,
-                    display: 'grid',
-                    placeItems: 'center',
-                  }}
-                >
-                  <div
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      display: 'grid',
-                      alignContent: 'center',
-                      gap: 14,
-                      pointerEvents: 'none',
-                    }}
-                  >
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <div
-                        key={i}
-                        style={{
-                          height: 1,
-                          background: '#cbd5e1',
-                          width: '100%',
-                        }}
-                      />
-                    ))}
-                  </div>
-
-                  <div
-                    style={{
-                      position: 'relative',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
-                      flexWrap: 'wrap',
-                      justifyContent: 'center',
-                      padding: '24px 12px',
-                    }}
-                  >
-                    {notes.map((note, i) => (
-                      <div
-                        key={i}
-                        style={{
-                          width: getDurationWidth(note.duration),
-                          minHeight: 72,
-                          border: '1px solid #d4d4d8',
-                          borderRadius: 12,
-                          background: note.isRest ? '#f3f4f6' : '#ffffff',
-                          display: 'grid',
-                          placeItems: 'center',
-                          padding: 8,
-                          zIndex: 1,
-                          transform: note.isRest ? 'translateY(0px)' : `translateY(${getPitchOffset(note.pitch)}px)`,
-                        }}
-                      >
-                        <div style={{ textAlign: 'center' }}>
-                          <div style={{ fontSize: 28, lineHeight: 1 }}>
-                            {note.isRest ? '𝄽' : getDurationGlyph(note.duration)}
-                          </div>
-
-                          {!note.isRest && note.accidental ? (
-                            <div style={{ fontSize: 14, marginTop: 6 }}>
-                              {getAccidentalGlyph(note.accidental)}
-                            </div>
-                          ) : null}
-
-                          {!note.isRest ? (
-                            <div style={{ fontSize: 11, marginTop: 4, color: '#71717a' }}>{note.pitch}</div>
-                          ) : null}
-
-                          <div style={{ fontSize: 10, marginTop: 4, color: '#a1a1aa' }}>
-                            M{note.measure} B{note.beat}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </section>
@@ -660,7 +552,7 @@ export default function PromptScoreShell() {
             ) : null}
           </PanelCard>
 
-          <PanelCard title="Brain Result">
+          <PanelCard title={mode === 'rhythm' ? 'Rhythm Result' : 'Brain Result'}>
             <div style={{ fontSize: 14, lineHeight: 1.5 }}>{brainSummary}</div>
           </PanelCard>
         </aside>
