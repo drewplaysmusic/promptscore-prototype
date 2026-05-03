@@ -1,13 +1,27 @@
 import { generateHarmonyPlan, type HarmonyPlan } from './harmonyBrain'
+import { buildPulseGridPlannedDurations } from './pulseGridMusicBridge'
 import {
   isScaleExercisePrompt,
   generateScaleExercise,
 } from './exerciseBrain'
-export type DurationValue = 'Whole' | 'Half' | 'Quarter' | 'Eighth' | '16th'
+export type DurationValue =
+  | 'Whole'
+  | 'DottedHalf'
+  | 'Half'
+  | 'DottedQuarter'
+  | 'Quarter'
+  | 'DottedEighth'
+  | 'Eighth'
+  | 'TripletEighth'
+  | '16th'
 export type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
 export type PitchValue = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B'
 export type TimeSignatureValue = '4/4' | '3/4' | '2/4' | '6/8'
-export type KeySignatureValue = 'C major' | 'G major' | 'F major' | 'D major' | 'A minor'
+export type KeySignatureValue =
+  | 'C major' | 'G major' | 'D major' | 'A major' | 'E major' | 'B major' | 'F# major' | 'C# major'
+  | 'F major' | 'Bb major' | 'Eb major' | 'Ab major' | 'Db major' | 'Gb major' | 'Cb major'
+  | 'A minor' | 'E minor' | 'B minor' | 'F# minor' | 'C# minor' | 'G# minor' | 'D# minor' | 'A# minor'
+  | 'D minor' | 'G minor' | 'C minor' | 'F minor' | 'Bb minor' | 'Eb minor' | 'Ab minor'
 type PhraseShapeValue = 'simple contour' | 'question answer' | 'motif sequence' | 'cadence focus'
 type StyleValue =
   | 'plain'
@@ -127,9 +141,13 @@ function removeScaleWordsFromRhythmParsing(prompt: string): string {
 
 function getDurationBeats(duration: DurationValue): number {
   if (duration === 'Whole') return 4
+  if (duration === 'DottedHalf') return 3
   if (duration === 'Half') return 2
+  if (duration === 'DottedQuarter') return 1.5
   if (duration === 'Quarter') return 1
+  if (duration === 'DottedEighth') return 0.75
   if (duration === 'Eighth') return 0.5
+  if (duration === 'TripletEighth') return 1 / 3
   return 0.25
 }
 
@@ -196,16 +214,30 @@ function getDisplayScaleName(tonalCenter: TonalCenterValue, scaleSystem: ScaleSy
 }
 
 function getKeySignatureForDisplay(tonalCenter: TonalCenterValue, scaleSystem: ScaleSystemValue): KeySignatureValue {
-  if (scaleSystem === 'major' || scaleSystem === 'ionian') {
-    if (tonalCenter === 'G') return 'G major'
-    if (tonalCenter === 'F') return 'F major'
-    if (tonalCenter === 'D') return 'D major'
-    return 'C major'
+  const majorKeys: Record<TonalCenterValue, KeySignatureValue> = {
+    C: 'C major',
+    G: 'G major',
+    D: 'D major',
+    A: 'A major',
+    E: 'E major',
+    B: 'B major',
+    F: 'F major',
   }
 
-  if ((scaleSystem === 'natural minor' || scaleSystem === 'aeolian') && tonalCenter === 'A') return 'A minor'
+  const minorKeys: Record<TonalCenterValue, KeySignatureValue> = {
+    A: 'A minor',
+    E: 'E minor',
+    B: 'B minor',
+    F: 'F minor',
+    C: 'C minor',
+    G: 'G minor',
+    D: 'D minor',
+  }
 
-  return 'C major'
+  if (scaleSystem === 'major' || scaleSystem === 'ionian') return majorKeys[tonalCenter]
+  if (scaleSystem === 'natural minor' || scaleSystem === 'aeolian' || scaleSystem === 'minor') return minorKeys[tonalCenter]
+
+  return majorKeys[tonalCenter]
 }
 
 function getScaleToneSemitone(scale: ScaleTone[], scaleIndex: number): number {
@@ -348,6 +380,14 @@ function parseRhythmPattern(
   const rhythmPrompt = removeScaleWordsFromRhythmParsing(prompt)
   const tokens = rhythmPrompt.toLowerCase().split(/\s+/)
   const pattern: DurationValue[] = []
+
+  if (rhythmPrompt.includes('triplet rhythm')) return ['TripletEighth', 'TripletEighth', 'TripletEighth', 'Quarter', 'Quarter']
+  if (rhythmPrompt.includes('eighth note triplets')) return ['TripletEighth', 'TripletEighth', 'TripletEighth']
+  if (rhythmPrompt.includes('swing triplets')) return ['TripletEighth', 'TripletEighth', 'TripletEighth', 'Quarter']
+
+  if (rhythmPrompt.includes('dotted quarter eighth')) return ['DottedQuarter', 'Eighth']
+  if (rhythmPrompt.includes('dotted eighth')) return ['DottedEighth', '16th', 'Quarter']
+  if (rhythmPrompt.includes('dotted rhythm')) return ['DottedQuarter', 'Eighth', 'Quarter']
 
   if (rhythmPrompt.includes('advanced rhythm')) return ['Quarter', 'Eighth', 'Eighth', 'Half']
   if (rhythmPrompt.includes('syncopated')) return ['Eighth', 'Quarter', 'Eighth', 'Half']
@@ -563,28 +603,15 @@ function buildBeginnerMelodyEvents(
   style: StyleValue,
   harmony: HarmonyPlan,
 ): Omit<NoteEvent, 'measure' | 'beat'>[] {
-  const measureBeats = getMeasureBeats(timeSignature)
-  const totalBeats = measureCount * measureBeats
   const includeRests = prompt.includes('rest') || prompt.includes('space')
   const events: Omit<NoteEvent, 'measure' | 'beat'>[] = []
-  let usedBeats = 0
   let eventIndex = 0
   let previousScaleIndex: number | null = null
-  const plannedDurations: PlannedDuration[] = []
-
-  while (usedBeats < totalBeats) {
-    const patternDuration = rhythmPattern[plannedDurations.length % rhythmPattern.length] || duration
-    const durationBeats = getDurationBeats(patternDuration)
-    if (usedBeats + durationBeats > totalBeats) break
-
-    plannedDurations.push({
-      duration: patternDuration,
-      startBeat: usedBeats,
-      measureIndex: Math.floor(usedBeats / measureBeats),
-      beatInMeasure: (usedBeats % measureBeats) + 1,
-    })
-    usedBeats += durationBeats
-  }
+  const plannedDurations = buildPulseGridPlannedDurations(
+    timeSignature,
+    rhythmPattern,
+    measureCount,
+  )
 
   plannedDurations.forEach((plannedDuration, i) => {
     const isLast = i === plannedDurations.length - 1
