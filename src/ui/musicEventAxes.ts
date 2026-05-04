@@ -1,8 +1,19 @@
 export type PitchValue = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B'
 export type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
+export type MusicBrainDurationValue =
+  | 'Whole'
+  | 'DottedHalf'
+  | 'Half'
+  | 'DottedQuarter'
+  | 'Quarter'
+  | 'DottedEighth'
+  | 'Eighth'
+  | 'TripletEighth'
+  | '16th'
 
 export type RhythmAxisEvent = {
   id: string
+  duration: MusicBrainDurationValue
   measure: number
   pulse: number
   startTick: number
