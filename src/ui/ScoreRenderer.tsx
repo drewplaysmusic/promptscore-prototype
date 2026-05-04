@@ -11,8 +11,9 @@ type KeySignatureValue =
   | 'A minor' | 'E minor' | 'B minor' | 'F# minor' | 'C# minor' | 'G# minor' | 'D# minor' | 'A# minor'
   | 'D minor' | 'G minor' | 'C minor' | 'F minor' | 'Bb minor' | 'Eb minor' | 'Ab minor'
 
-const FIRST_MEASURE_HEADER_WIDTH = 118
-const SYSTEM_HEADER_WIDTH = 54
+const FIRST_MEASURE_HEADER_WIDTH = 178
+const SYSTEM_HEADER_WIDTH = 64
+const MEASURE_LEFT_PADDING = 26
 const MEASURE_RIGHT_PADDING = 22
 
 type NoteEvent = {
@@ -144,7 +145,7 @@ function getPulseGridSourceWidth(timeSignature: TimeSignatureValue): number {
 function getNotationHeaderWidth(isFirstMeasureOfSystem: boolean, measureIndex: number): number {
   if (measureIndex === 0) return FIRST_MEASURE_HEADER_WIDTH
   if (isFirstMeasureOfSystem) return SYSTEM_HEADER_WIDTH
-  return MEASURE_RIGHT_PADDING
+  return MEASURE_LEFT_PADDING
 }
 
 function getPulseGridBounds(x: number, staveWidth: number, isFirstMeasureOfSystem: boolean, measureIndex: number) {
