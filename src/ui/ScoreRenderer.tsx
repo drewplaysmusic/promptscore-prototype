@@ -11,10 +11,16 @@ type KeySignatureValue =
   | 'A minor' | 'E minor' | 'B minor' | 'F# minor' | 'C# minor' | 'G# minor' | 'D# minor' | 'A# minor'
   | 'D minor' | 'G minor' | 'C minor' | 'F minor' | 'Bb minor' | 'Eb minor' | 'Ab minor'
 
-const FIRST_MEASURE_HEADER_WIDTH = 178
-const SYSTEM_HEADER_WIDTH = 64
-const MEASURE_LEFT_PADDING = 26
 const MEASURE_RIGHT_PADDING = 22
+const FALLBACK_FIRST_MEASURE_HEADER_WIDTH = 178
+const FALLBACK_SYSTEM_HEADER_WIDTH = 64
+const FALLBACK_MEASURE_LEFT_PADDING = 26
+
+type PulseGridBounds = {
+  gridLeft: number
+  gridRight: number
+  gridWidth: number
+}
 
 type NoteEvent = {
   duration: DurationValue
@@ -142,16 +148,29 @@ function getPulseGridSourceWidth(timeSignature: TimeSignatureValue): number {
   return getPulseCountForGrid(timeSignature) * 220
 }
 
-function getNotationHeaderWidth(isFirstMeasureOfSystem: boolean, measureIndex: number): number {
-  if (measureIndex === 0) return FIRST_MEASURE_HEADER_WIDTH
-  if (isFirstMeasureOfSystem) return SYSTEM_HEADER_WIDTH
-  return MEASURE_LEFT_PADDING
+function getFallbackHeaderWidth(isFirstMeasureOfSystem: boolean, measureIndex: number): number {
+  if (measureIndex === 0) return FALLBACK_FIRST_MEASURE_HEADER_WIDTH
+  if (isFirstMeasureOfSystem) return FALLBACK_SYSTEM_HEADER_WIDTH
+  return FALLBACK_MEASURE_LEFT_PADDING
 }
 
-function getPulseGridBounds(x: number, staveWidth: number, isFirstMeasureOfSystem: boolean, measureIndex: number) {
-  const headerWidth = getNotationHeaderWidth(isFirstMeasureOfSystem, measureIndex)
-  const gridLeft = x + headerWidth
+function getPulseGridBoundsFromStave(
+  stave: Stave,
+  x: number,
+  staveWidth: number,
+  isFirstMeasureOfSystem: boolean,
+  measureIndex: number,
+): PulseGridBounds {
+  const dynamicNoteStartX = typeof (stave as any).getNoteStartX === 'function'
+    ? Number((stave as any).getNoteStartX())
+    : NaN
+
+  const fallbackGridLeft = x + getFallbackHeaderWidth(isFirstMeasureOfSystem, measureIndex)
+  const gridLeft = Number.isFinite(dynamicNoteStartX) && dynamicNoteStartX > x
+    ? dynamicNoteStartX
+    : fallbackGridLeft
   const gridRight = x + staveWidth - MEASURE_RIGHT_PADDING
+
   return {
     gridLeft,
     gridRight,
@@ -159,18 +178,16 @@ function getPulseGridBounds(x: number, staveWidth: number, isFirstMeasureOfSyste
   }
 }
 
-function getManualNoteX(note: NoteEvent, x: number, staveWidth: number, timeSignature: TimeSignatureValue, isFirstMeasureOfSystem: boolean, measureIndex: number): number | null {
+function getManualNoteX(note: NoteEvent, bounds: PulseGridBounds, timeSignature: TimeSignatureValue): number | null {
   if (typeof note.startX !== 'number') return null
 
-  const { gridLeft, gridWidth } = getPulseGridBounds(x, staveWidth, isFirstMeasureOfSystem, measureIndex)
   const sourceWidth = getPulseGridSourceWidth(timeSignature)
   const normalizedX = Math.max(0, Math.min(1, note.startX / sourceWidth))
-
-  return gridLeft + normalizedX * gridWidth
+  return bounds.gridLeft + normalizedX * bounds.gridWidth
 }
 
-function applyPulseGridTickContext(vexNote: StaveNote, note: NoteEvent, x: number, staveWidth: number, timeSignature: TimeSignatureValue, isFirstMeasureOfSystem: boolean, measureIndex: number): boolean {
-  const manualX = getManualNoteX(note, x, staveWidth, timeSignature, isFirstMeasureOfSystem, measureIndex)
+function applyPulseGridTickContext(vexNote: StaveNote, note: NoteEvent, bounds: PulseGridBounds, timeSignature: TimeSignatureValue): boolean {
+  const manualX = getManualNoteX(note, bounds, timeSignature)
   if (manualX === null) return false
 
   const tickContext = new TickContext()
@@ -184,35 +201,31 @@ function applyPulseGridTickContext(vexNote: StaveNote, note: NoteEvent, x: numbe
 
 function drawPulseGridOverlay(
   context: any,
-  x: number,
   y: number,
-  staveWidth: number,
   timeSignature: TimeSignatureValue,
   measureIndex: number,
-  isFirstMeasureOfSystem: boolean,
+  bounds: PulseGridBounds,
 ) {
   if (!context || typeof context.beginPath !== 'function') return
 
   const pulseCount = getPulseCountForGrid(timeSignature)
   const subdivisionCount = getSubdivisionCountForGrid(timeSignature)
-  const { gridLeft, gridRight, gridWidth } = getPulseGridBounds(x, staveWidth, isFirstMeasureOfSystem, measureIndex)
   const gridTop = y + 8
   const gridBottom = y + 88
-  const pulseWidth = gridWidth / pulseCount
+  const pulseWidth = bounds.gridWidth / pulseCount
 
   context.save()
-
   context.setStrokeStyle('#e5e7eb')
   context.setLineWidth(1)
   context.beginPath()
-  context.moveTo(gridLeft, gridTop)
-  context.lineTo(gridRight, gridTop)
-  context.moveTo(gridLeft, gridBottom)
-  context.lineTo(gridRight, gridBottom)
+  context.moveTo(bounds.gridLeft, gridTop)
+  context.lineTo(bounds.gridRight, gridTop)
+  context.moveTo(bounds.gridLeft, gridBottom)
+  context.lineTo(bounds.gridRight, gridBottom)
   context.stroke()
 
   for (let pulse = 0; pulse <= pulseCount; pulse += 1) {
-    const pulseX = gridLeft + pulse * pulseWidth
+    const pulseX = bounds.gridLeft + pulse * pulseWidth
     context.setStrokeStyle(pulse === 0 || pulse === pulseCount ? '#cbd5e1' : '#d1d5db')
     context.setLineWidth(pulse === 0 || pulse === pulseCount ? 1.2 : 1)
     context.beginPath()
@@ -321,9 +334,7 @@ function getMeterAwareBeams(vexNotes: StaveNote[], notesForMeasure: NoteEvent[],
   let activeGroup: StaveNote[] = []
 
   function flushGroup() {
-    if (activeGroup.length >= 2) {
-      beams.push(new Beam(activeGroup))
-    }
+    if (activeGroup.length >= 2) beams.push(new Beam(activeGroup))
     activeGroup = []
   }
 
@@ -333,10 +344,7 @@ function getMeterAwareBeams(vexNotes: StaveNote[], notesForMeasure: NoteEvent[],
     const isRatioGrouped = Boolean(note.tupletGroupId || note.ratioLabel || note.bracketGroupId)
     const crossesBoundary = noteCrossesBeamBoundary(note, beatStart, boundarySize)
 
-    if (activeBoundary !== null && boundaryIndex !== activeBoundary) {
-      flushGroup()
-    }
-
+    if (activeBoundary !== null && boundaryIndex !== activeBoundary) flushGroup()
     activeBoundary = boundaryIndex
 
     if (isBeamable(note) && !isRatioGrouped && !crossesBoundary) {
@@ -394,7 +402,6 @@ function getRatioTupletsAndBeams(vexNotes: StaveNote[], notesForMeasure: NoteEve
 
   groups.forEach((group) => {
     if (group.vexNotes.length < 2) return
-
     beams.push(new Beam(group.vexNotes))
 
     const tupletNumber = parseTupletNumber(group.notes[0]) ?? group.vexNotes.length
@@ -464,7 +471,6 @@ export default function ScoreRenderer({
     if (notes.length === 0) return
 
     const measureGroups = groupNotesByMeasure(notes)
-
     const pageWidth = 1180
     const pageHeight = 760
     const leftMargin = 36
@@ -481,13 +487,10 @@ export default function ScoreRenderer({
     measureGroups.forEach((measureNotes, measureIndex) => {
       const systemIndex = Math.floor(measureIndex / measuresPerSystem)
       const measureInSystem = measureIndex % measuresPerSystem
-
       const y = topMargin + systemIndex * systemGap
       const x = leftMargin + measureInSystem * 372
       const isFirstMeasureOfSystem = measureInSystem === 0
       const staveWidth = 372
-
-      drawPulseGridOverlay(context as any, x, y, staveWidth, timeSignature, measureIndex, isFirstMeasureOfSystem)
 
       const stave = new Stave(x, y, staveWidth)
 
@@ -500,7 +503,10 @@ export default function ScoreRenderer({
         stave.addTimeSignature(timeSignature)
       }
 
-      stave.setContext(context).draw()
+      stave.setContext(context)
+      const pulseGridBounds = getPulseGridBoundsFromStave(stave, x, staveWidth, isFirstMeasureOfSystem, measureIndex)
+      drawPulseGridOverlay(context as any, y, timeSignature, measureIndex, pulseGridBounds)
+      stave.draw()
 
       if (showHarmonyOverlay && harmonyProgression.length > 0) {
         const harmonyLabel = harmonyProgression[measureIndex % harmonyProgression.length]
@@ -530,7 +536,7 @@ export default function ScoreRenderer({
           Dot.buildAndAttach([vexNote])
         }
 
-        if (applyPulseGridTickContext(vexNote, note, x, staveWidth, timeSignature, isFirstMeasureOfSystem, measureIndex)) {
+        if (applyPulseGridTickContext(vexNote, note, pulseGridBounds, timeSignature)) {
           usedManualGridSpacing = true
         }
 
