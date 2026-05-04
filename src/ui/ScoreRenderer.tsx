@@ -231,11 +231,15 @@ function getMeterAwareBeams(vexNotes: StaveNote[], notesForMeasure: NoteEvent[],
 
 function parseTupletNumber(note: NoteEvent): number | null {
   const source = `${note.ratioLabel ?? ''} ${note.tupletGroupId ?? ''} ${note.bracketGroupId ?? ''}`
+
   const ratioMatch = source.match(/(\d+)\s*:/)
   if (ratioMatch) return Number(ratioMatch[1])
 
   const tupletMatch = source.match(/tuplet-(\d+)/)
   if (tupletMatch) return Number(tupletMatch[1])
+
+  const ratioIdMatch = source.match(/ratio-(\d+)-(\d+)/)
+  if (ratioIdMatch) return Number(ratioIdMatch[1])
 
   if (note.duration === 'TripletEighth') return 3
   return null
