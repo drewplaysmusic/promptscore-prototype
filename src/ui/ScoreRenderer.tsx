@@ -245,6 +245,14 @@ function parseTupletNumber(note: NoteEvent): number | null {
   return null
 }
 
+function getTupletNotesOccupied(tupletNumber: number): number | undefined {
+  if (tupletNumber === 3) return 2
+  if (tupletNumber === 5) return 4
+  if (tupletNumber === 7) return 4
+  if (tupletNumber === 9) return 8
+  return undefined
+}
+
 function getRatioTupletsAndBeams(vexNotes: StaveNote[], notesForMeasure: NoteEvent[]): { tuplets: Tuplet[]; beams: Beam[] } {
   const tuplets: Tuplet[] = []
   const beams: Beam[] = []
@@ -268,7 +276,12 @@ function getRatioTupletsAndBeams(vexNotes: StaveNote[], notesForMeasure: NoteEve
 
     const tupletNumber = parseTupletNumber(group.notes[0]) ?? group.vexNotes.length
     if (tupletNumber >= 3) {
-      tuplets.push(new Tuplet(group.vexNotes, { num_notes: tupletNumber }))
+      tuplets.push(
+        new Tuplet(group.vexNotes, {
+          num_notes: tupletNumber,
+          notes_occupied: getTupletNotesOccupied(tupletNumber),
+        }),
+      )
     }
   })
 
