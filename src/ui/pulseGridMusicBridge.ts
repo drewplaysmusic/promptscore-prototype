@@ -56,6 +56,18 @@ function getRatioNotationDuration(actualNotes: number): MusicBrainDurationValue 
   return '16th'
 }
 
+function isTripletPrompt(normalized: string): boolean {
+  return (
+    normalized.includes('triplet rhythm') ||
+    normalized.includes('eighth note triplets') ||
+    normalized.includes('eighth triplets') ||
+    normalized.includes('8th note triplets') ||
+    normalized.includes('8th triplets') ||
+    normalized.includes('eighth-note triplets') ||
+    normalized.includes('8th-note triplets')
+  )
+}
+
 export function parseRatioPrompt(prompt: string): RatioPromptPlan | null {
   const normalized = prompt.toLowerCase().replace(/[,.;:]/g, ' ')
 
@@ -119,7 +131,7 @@ export function parseRatioPrompt(prompt: string): RatioPromptPlan | null {
     }
   }
 
-  if (normalized.includes('triplet rhythm') || normalized.includes('eighth note triplets')) {
+  if (isTripletPrompt(normalized)) {
     return {
       ratio: {
         actualNotes: 3,
@@ -138,6 +150,7 @@ export function parseRatioPrompt(prompt: string): RatioPromptPlan | null {
 function plannedDurationToRhythmAxisEvent(planned: PulseGridPlannedDuration, index: number): RhythmAxisEvent {
   return {
     id: `rhythm-axis-${planned.measureIndex + 1}-${index}`,
+    duration: planned.duration,
     measure: planned.measureIndex + 1,
     pulse: Math.max(1, Math.floor(planned.beatInMeasure)),
     startTick: planned.startTick,
