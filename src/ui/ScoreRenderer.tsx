@@ -22,6 +22,10 @@ type NoteEvent = {
   ratioLabel?: string
   beamGroupId?: string
   bracketGroupId?: string
+  startTick?: number
+  endTick?: number
+  startX?: number
+  endX?: number
 }
 
 function isDottedDuration(duration: DurationValue): boolean {
@@ -117,6 +121,77 @@ function getVoiceConfig(timeSignature: TimeSignatureValue): { num_beats: number;
   if (timeSignature === '2/4') return { num_beats: 2, beat_value: 4 }
   if (timeSignature === '6/8') return { num_beats: 6, beat_value: 8 }
   return { num_beats: 4, beat_value: 4 }
+}
+
+function getPulseCountForGrid(timeSignature: TimeSignatureValue): number {
+  if (timeSignature === '6/8') return 2
+  return getMeasureBeats(timeSignature)
+}
+
+function getSubdivisionCountForGrid(timeSignature: TimeSignatureValue): number {
+  if (timeSignature === '6/8') return 3
+  return 4
+}
+
+function drawPulseGridOverlay(
+  context: any,
+  x: number,
+  y: number,
+  staveWidth: number,
+  timeSignature: TimeSignatureValue,
+  measureIndex: number,
+) {
+  if (!context || typeof context.beginPath !== 'function') return
+
+  const pulseCount = getPulseCountForGrid(timeSignature)
+  const subdivisionCount = getSubdivisionCountForGrid(timeSignature)
+  const gridLeft = x + 10
+  const gridRight = x + staveWidth - 10
+  const gridWidth = gridRight - gridLeft
+  const gridTop = y + 8
+  const gridBottom = y + 88
+  const pulseWidth = gridWidth / pulseCount
+
+  context.save()
+
+  context.setStrokeStyle('#e5e7eb')
+  context.setLineWidth(1)
+  context.beginPath()
+  context.moveTo(gridLeft, gridTop)
+  context.lineTo(gridRight, gridTop)
+  context.moveTo(gridLeft, gridBottom)
+  context.lineTo(gridRight, gridBottom)
+  context.stroke()
+
+  for (let pulse = 0; pulse <= pulseCount; pulse += 1) {
+    const pulseX = gridLeft + pulse * pulseWidth
+    context.setStrokeStyle(pulse === 0 || pulse === pulseCount ? '#cbd5e1' : '#d1d5db')
+    context.setLineWidth(pulse === 0 || pulse === pulseCount ? 1.2 : 1)
+    context.beginPath()
+    context.moveTo(pulseX, gridTop)
+    context.lineTo(pulseX, gridBottom)
+    context.stroke()
+
+    if (pulse < pulseCount) {
+      context.setFont('Arial', 9, 'normal')
+      context.setFillStyle('#94a3b8')
+      context.fillText(`${measureIndex + 1}.${pulse + 1}`, pulseX + 4, gridTop - 3)
+    }
+
+    if (pulse < pulseCount) {
+      for (let subdivision = 1; subdivision < subdivisionCount; subdivision += 1) {
+        const subdivisionX = pulseX + (pulseWidth * subdivision) / subdivisionCount
+        context.setStrokeStyle('#eef2f7')
+        context.setLineWidth(1)
+        context.beginPath()
+        context.moveTo(subdivisionX, gridTop + 12)
+        context.lineTo(subdivisionX, gridBottom - 12)
+        context.stroke()
+      }
+    }
+  }
+
+  context.restore()
 }
 
 function getLargestRestDuration(remainingBeats: number): DurationValue {
@@ -364,6 +439,8 @@ export default function ScoreRenderer({
       const isFirstMeasureOfSystem = measureInSystem === 0
       const staveWidth = 372
 
+      drawPulseGridOverlay(context as any, x, y, staveWidth, timeSignature, measureIndex)
+
       const stave = new Stave(x, y, staveWidth)
 
       if (isFirstMeasureOfSystem) {
@@ -451,7 +528,7 @@ export default function ScoreRenderer({
         }}
       >
         <div style={{ fontSize: 12, fontWeight: 700, color: '#71717a', textTransform: 'uppercase' }}>
-          Score Timeline · {keySignature}{showHarmonyOverlay ? ' · Harmony Overlay' : ''}
+          Score Timeline · PulseGrid · {keySignature}{showHarmonyOverlay ? ' · Harmony Overlay' : ''}
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
