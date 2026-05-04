@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Accidental as VFAccidental, Beam, Dot, Formatter, Renderer, Stave, StaveNote, Tuplet, Voice } from 'vexflow'
+import { Accidental as VFAccidental, Beam, Dot, Formatter, Renderer, Stave, StaveNote, TickContext, Tuplet, Voice } from 'vexflow'
 
 type DurationValue = 'Whole' | 'DottedHalf' | 'Half' | 'DottedQuarter' | 'Quarter' | 'DottedEighth' | 'Eighth' | '16th' | 'TripletEighth'
 type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
@@ -133,6 +133,34 @@ function getSubdivisionCountForGrid(timeSignature: TimeSignatureValue): number {
   return 4
 }
 
+function getPulseGridSourceWidth(timeSignature: TimeSignatureValue): number {
+  return getPulseCountForGrid(timeSignature) * 220
+}
+
+function getManualNoteX(note: NoteEvent, x: number, staveWidth: number, timeSignature: TimeSignatureValue): number | null {
+  if (typeof note.startX !== 'number') return null
+
+  const gridLeft = x + 28
+  const gridWidth = staveWidth - 56
+  const sourceWidth = getPulseGridSourceWidth(timeSignature)
+  const normalizedX = Math.max(0, Math.min(1, note.startX / sourceWidth))
+
+  return gridLeft + normalizedX * gridWidth
+}
+
+function applyPulseGridTickContext(vexNote: StaveNote, note: NoteEvent, x: number, staveWidth: number, timeSignature: TimeSignatureValue): boolean {
+  const manualX = getManualNoteX(note, x, staveWidth, timeSignature)
+  if (manualX === null) return false
+
+  const tickContext = new TickContext()
+  tickContext.setX(manualX)
+  tickContext.addTickable(vexNote)
+  tickContext.preFormat()
+  vexNote.setTickContext(tickContext)
+
+  return true
+}
+
 function drawPulseGridOverlay(
   context: any,
   x: number,
@@ -145,8 +173,8 @@ function drawPulseGridOverlay(
 
   const pulseCount = getPulseCountForGrid(timeSignature)
   const subdivisionCount = getSubdivisionCountForGrid(timeSignature)
-  const gridLeft = x + 10
-  const gridRight = x + staveWidth - 10
+  const gridLeft = x + 28
+  const gridRight = x + staveWidth - 28
   const gridWidth = gridRight - gridLeft
   const gridTop = y + 8
   const gridBottom = y + 88
@@ -464,6 +492,7 @@ export default function ScoreRenderer({
 
       const paddingRests = getPaddingRests(measureNotes, timeSignature)
       const measureWithPadding = [...measureNotes, ...paddingRests]
+      let usedManualGridSpacing = false
 
       const vexNotes = measureWithPadding.map((note) => {
         const vexNote = new StaveNote({
@@ -481,6 +510,10 @@ export default function ScoreRenderer({
           Dot.buildAndAttach([vexNote])
         }
 
+        if (applyPulseGridTickContext(vexNote, note, x, staveWidth, timeSignature)) {
+          usedManualGridSpacing = true
+        }
+
         return vexNote
       })
 
@@ -494,7 +527,12 @@ export default function ScoreRenderer({
       const beams = [...normalBeams, ...tripletResult.beams, ...ratioResult.beams]
       const tuplets = [...tripletResult.tuplets, ...ratioResult.tuplets]
 
-      new Formatter().joinVoices([voice]).format([voice], staveWidth - 92)
+      if (usedManualGridSpacing) {
+        new Formatter().joinVoices([voice]).format([voice], 0)
+      } else {
+        new Formatter().joinVoices([voice]).format([voice], staveWidth - 92)
+      }
+
       voice.draw(context, stave)
       beams.forEach((beam) => {
         beam.setContext(context).draw()
