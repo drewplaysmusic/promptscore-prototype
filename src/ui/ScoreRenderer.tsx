@@ -18,6 +18,10 @@ type NoteEvent = {
   pitch: PitchValue
   measure: number
   beat: number
+  tupletGroupId?: string
+  ratioLabel?: string
+  beamGroupId?: string
+  bracketGroupId?: string
 }
 
 function isDottedDuration(duration: DurationValue): boolean {
@@ -203,7 +207,7 @@ function getMeterAwareBeams(vexNotes: StaveNote[], notesForMeasure: NoteEvent[],
   notesForMeasure.forEach((note, index) => {
     const beatStart = getBeatStart(note, fallbackBeatCursor)
     const boundaryIndex = getBeamBoundaryIndex(beatStart, boundarySize)
-    const isTriplet = note.duration === 'TripletEighth'
+    const isRatioGrouped = Boolean(note.tupletGroupId || note.ratioLabel || note.bracketGroupId)
     const crossesBoundary = noteCrossesBeamBoundary(note, beatStart, boundarySize)
 
     if (activeBoundary !== null && boundaryIndex !== activeBoundary) {
@@ -212,7 +216,7 @@ function getMeterAwareBeams(vexNotes: StaveNote[], notesForMeasure: NoteEvent[],
 
     activeBoundary = boundaryIndex
 
-    if (isBeamable(note) && !isTriplet && !crossesBoundary) {
+    if (isBeamable(note) && !isRatioGrouped && !crossesBoundary) {
       activeGroup.push(vexNotes[index])
     } else {
       flushGroup()
@@ -223,6 +227,48 @@ function getMeterAwareBeams(vexNotes: StaveNote[], notesForMeasure: NoteEvent[],
 
   flushGroup()
   return beams
+}
+
+function parseTupletNumber(note: NoteEvent): number | null {
+  const source = `${note.ratioLabel ?? ''} ${note.tupletGroupId ?? ''} ${note.bracketGroupId ?? ''}`
+  const ratioMatch = source.match(/(\d+)\s*:/)
+  if (ratioMatch) return Number(ratioMatch[1])
+
+  const tupletMatch = source.match(/tuplet-(\d+)/)
+  if (tupletMatch) return Number(tupletMatch[1])
+
+  if (note.duration === 'TripletEighth') return 3
+  return null
+}
+
+function getRatioTupletsAndBeams(vexNotes: StaveNote[], notesForMeasure: NoteEvent[]): { tuplets: Tuplet[]; beams: Beam[] } {
+  const tuplets: Tuplet[] = []
+  const beams: Beam[] = []
+  const groups = new Map<string, { vexNotes: StaveNote[]; notes: NoteEvent[] }>()
+
+  notesForMeasure.forEach((note, index) => {
+    if (note.isRest || note.measure <= 0) return
+    const groupId = note.bracketGroupId || note.tupletGroupId || note.ratioLabel
+    if (!groupId) return
+
+    const existing = groups.get(groupId) ?? { vexNotes: [], notes: [] }
+    existing.vexNotes.push(vexNotes[index])
+    existing.notes.push(note)
+    groups.set(groupId, existing)
+  })
+
+  groups.forEach((group) => {
+    if (group.vexNotes.length < 2) return
+
+    beams.push(new Beam(group.vexNotes))
+
+    const tupletNumber = parseTupletNumber(group.notes[0]) ?? group.vexNotes.length
+    if (tupletNumber >= 3) {
+      tuplets.push(new Tuplet(group.vexNotes, { num_notes: tupletNumber }))
+    }
+  })
+
+  return { tuplets, beams }
 }
 
 function getTripletTupletsAndBeams(vexNotes: StaveNote[], notesForMeasure: NoteEvent[]): { tuplets: Tuplet[]; beams: Beam[] } {
@@ -239,7 +285,9 @@ function getTripletTupletsAndBeams(vexNotes: StaveNote[], notesForMeasure: NoteE
   }
 
   notesForMeasure.forEach((note, index) => {
-    if (note.duration === 'TripletEighth' && !note.isRest && note.measure > 0) {
+    const isRatioGrouped = Boolean(note.tupletGroupId || note.ratioLabel || note.bracketGroupId)
+
+    if (note.duration === 'TripletEighth' && !note.isRest && note.measure > 0 && !isRatioGrouped) {
       activeTripletGroup.push(vexNotes[index])
       if (activeTripletGroup.length === 3) flushTripletGroup()
       return
@@ -348,8 +396,9 @@ export default function ScoreRenderer({
 
       const normalBeams = getMeterAwareBeams(vexNotes, measureWithPadding, timeSignature)
       const tripletResult = getTripletTupletsAndBeams(vexNotes, measureWithPadding)
-      const beams = [...normalBeams, ...tripletResult.beams]
-      const tuplets = tripletResult.tuplets
+      const ratioResult = getRatioTupletsAndBeams(vexNotes, measureWithPadding)
+      const beams = [...normalBeams, ...tripletResult.beams, ...ratioResult.beams]
+      const tuplets = [...tripletResult.tuplets, ...ratioResult.tuplets]
 
       new Formatter().joinVoices([voice]).format([voice], staveWidth - 92)
       voice.draw(context, stave)
