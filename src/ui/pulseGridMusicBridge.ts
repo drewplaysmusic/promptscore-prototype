@@ -6,6 +6,7 @@ import {
   type RhythmEventInput,
   type TimeSignatureValue,
 } from './pulseGridEngine'
+import type { RhythmAxisEvent, RhythmAxisPlan } from './musicEventAxes'
 
 export type MusicBrainDurationValue =
   | 'Whole'
@@ -132,6 +133,54 @@ export function parseRatioPrompt(prompt: string): RatioPromptPlan | null {
   }
 
   return null
+}
+
+function plannedDurationToRhythmAxisEvent(planned: PulseGridPlannedDuration, index: number): RhythmAxisEvent {
+  return {
+    id: `rhythm-axis-${planned.measureIndex + 1}-${index}`,
+    measure: planned.measureIndex + 1,
+    pulse: Math.max(1, Math.floor(planned.beatInMeasure)),
+    startTick: planned.startTick,
+    durationTicks: planned.endTick - planned.startTick,
+    endTick: planned.endTick,
+    startMs: 0,
+    durationMs: 0,
+    endMs: 0,
+    startX: planned.startX,
+    endX: planned.endX,
+    beamGroupId: planned.beamGroupId,
+    tupletGroupId: planned.tupletGroupId,
+    ratioLabel: planned.tupletGroupId?.includes('ratio') ? planned.tupletGroupId : undefined,
+    bracketGroupId: planned.tupletGroupId,
+    crossesPulse: planned.crossesPulse,
+    requiresTie: planned.requiresTie,
+  }
+}
+
+export function buildRhythmAxisPlan(
+  timeSignature: TimeSignatureValue,
+  rhythmPattern: MusicBrainDurationValue[],
+  measureCount: number,
+  tempoBpm = 96,
+  prompt = '',
+): RhythmAxisPlan {
+  const plannedDurations = buildPulseGridPlannedDurations(
+    timeSignature,
+    rhythmPattern,
+    measureCount,
+    tempoBpm,
+    prompt,
+  )
+
+  const events = plannedDurations.map(plannedDurationToRhythmAxisEvent)
+  const ratioPlan = parseRatioPrompt(prompt)
+
+  return {
+    events,
+    summary: ratioPlan
+      ? `Rhythm Axis: ${ratioPlan.ratio.label ?? `${ratioPlan.ratio.actualNotes}:${ratioPlan.ratio.normalNotes}`} across ${ratioPlan.ratio.spanPulses} pulse(s).`
+      : `Rhythm Axis: ${events.length} event(s) planned on ${timeSignature}.`,
+  }
 }
 
 export function buildPulseGridPlannedDurations(
