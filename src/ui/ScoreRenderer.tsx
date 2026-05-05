@@ -491,10 +491,11 @@ export default function ScoreRenderer({
       const normalBeams = getMeterAwareBeams(vexNotes, measureWithPadding, timeSignature)
       const tripletResult = getTripletTupletsAndBeams(vexNotes, measureWithPadding)
       const ratioResult = getRatioTupletsAndBeams(vexNotes, measureWithPadding)
-      const beams = [...normalBeams, ...tripletResult.beams, ...ratioResult.beams]
+            const beams = [...normalBeams, ...tripletResult.beams, ...ratioResult.beams]
       const tuplets = [...tripletResult.tuplets, ...ratioResult.tuplets]
 
-      new Formatter().joinVoices([voice]).format([voice], 0)
+      new Formatter().joinVoices([voice]).format([voice], staveWidth - 92)
+
       voice.draw(context, stave)
       beams.forEach((beam) => {
         beam.setContext(context).draw()
@@ -506,6 +507,7 @@ export default function ScoreRenderer({
   }, [notes, timeSignature, keySignature, harmonyProgression, showHarmonyOverlay])
 
   return (
+
     <div
       style={{
         marginTop: 16,

@@ -1,3 +1,9 @@
+import {
+  createMusicXYMeasureGrid,
+  createRatioSpans,
+  createNestedRatioSpans,
+  createMusicXYEventsFromSpans
+} from './musicXYGrid'
 import { generateHarmonyPlan, type HarmonyPlan } from './harmonyBrain'
 import { buildPulseGridPlannedDurations } from './pulseGridMusicBridge'
 import {
@@ -65,6 +71,14 @@ export type NoteEvent = {
   pitch: PitchValue
   measure: number
   beat: number
+  tupletGroupId?: string
+  ratioLabel?: string
+  beamGroupId?: string
+  bracketGroupId?: string
+  startTick?: number
+  endTick?: number
+  startX?: number
+  endX?: number
 }
 
 type BrainDefaults = {
@@ -426,6 +440,8 @@ function parseRhythmPattern(
   return fallback === 'Quarter' ? ['Quarter', 'Quarter', 'Half'] : [fallback]
 }
 
+const USE_XY_ENGINE = false
+
 function shouldUseGeneratedMelody(prompt: string, explicitEvents: Omit<NoteEvent, 'measure' | 'beat'>[]): boolean {
   if (explicitEvents.length === 0) return true
   return (
@@ -603,6 +619,57 @@ function buildBeginnerMelodyEvents(
   style: StyleValue,
   harmony: HarmonyPlan,
 ): Omit<NoteEvent, 'measure' | 'beat'>[] {
+ if (USE_XY_ENGINE) {
+  const events: Omit<NoteEvent, 'measure' | 'beat'>[] = []
+  const grid = createMusicXYMeasureGrid(timeSignature, 1)
+
+  let xyEvents: ReturnType<typeof createMusicXYEventsFromSpans> = []
+  let renderedDuration: DurationValue = 'Quarter'
+  let useTupletMetadata = false
+
+  if (prompt.includes('ninelet') || prompt.includes('subdivide triplet')) {
+    const spans = createNestedRatioSpans(grid, 3, 2, 3, 1)
+    xyEvents = createMusicXYEventsFromSpans(spans)
+    renderedDuration = '16th'
+    useTupletMetadata = true
+  } else if (prompt.includes('triplet')) {
+    const spans = createRatioSpans(grid, 3, 2, 1, 2)
+    xyEvents = createMusicXYEventsFromSpans(spans)
+    renderedDuration = 'TripletEighth'
+    useTupletMetadata = true
+  } else if (prompt.includes('eighth') || prompt.includes('8th')) {
+    const spans = createRatioSpans(grid, 8, 8, 1, 4)
+    xyEvents = createMusicXYEventsFromSpans(spans)
+    renderedDuration = 'Eighth'
+    useTupletMetadata = false
+  } else {
+    const spans = createRatioSpans(grid, 4, 4, 1, 4)
+    xyEvents = createMusicXYEventsFromSpans(spans)
+    renderedDuration = 'Quarter'
+    useTupletMetadata = false
+  }
+
+  xyEvents.forEach((xy, i) => {
+    const scaleTone = scale[i % scale.length]
+
+    events.push({
+      duration: renderedDuration,
+      accidental: scaleTone.accidental,
+      isRest: false,
+      pitch: scaleTone.pitch,
+
+      startX: xy.x.startXRatio * 880,
+      endX: xy.x.endXRatio * 880,
+
+      beamGroupId: useTupletMetadata ? xy.beamGroupId : undefined,
+      tupletGroupId: useTupletMetadata ? xy.tupletGroupId : undefined,
+      bracketGroupId: useTupletMetadata ? xy.bracketGroupId : undefined,
+      ratioLabel: useTupletMetadata ? xy.ratioLabel : undefined,
+    })
+  })
+
+  return events
+}
   const includeRests = prompt.includes('rest') || prompt.includes('space')
   const events: Omit<NoteEvent, 'measure' | 'beat'>[] = []
   let eventIndex = 0
