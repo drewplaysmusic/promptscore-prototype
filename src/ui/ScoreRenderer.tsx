@@ -494,7 +494,7 @@ export default function ScoreRenderer({
       const beams = [...normalBeams, ...tripletResult.beams, ...ratioResult.beams]
       const tuplets = [...tripletResult.tuplets, ...ratioResult.tuplets]
 
-      new Formatter().joinVoices([voice]).format([voice], staveWidth - 92)
+      new Formatter().joinVoices([voice]).format([voice], 0)
       voice.draw(context, stave)
       beams.forEach((beam) => {
         beam.setContext(context).draw()
