@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Accidental as VFAccidental, Beam, Dot, Formatter, Renderer, Stave, StaveNote, Tuplet, Voice } from 'vexflow'
+import { createMeasureFrame, type MeasureFrame } from './measureFrame'
 
 type DurationValue = 'Whole' | 'DottedHalf' | 'Half' | 'DottedQuarter' | 'Quarter' | 'DottedEighth' | 'Eighth' | '16th' | 'TripletEighth'
 type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
@@ -135,19 +136,18 @@ function getSubdivisionCountForGrid(timeSignature: TimeSignatureValue): number {
 
 function drawPulseGridOverlay(
   context: any,
-  x: number,
   y: number,
-  staveWidth: number,
   timeSignature: TimeSignatureValue,
   measureIndex: number,
+  measureFrame: MeasureFrame,
 ) {
   if (!context || typeof context.beginPath !== 'function') return
 
   const pulseCount = getPulseCountForGrid(timeSignature)
   const subdivisionCount = getSubdivisionCountForGrid(timeSignature)
-  const gridLeft = x + 10
-  const gridRight = x + staveWidth - 10
-  const gridWidth = gridRight - gridLeft
+  const gridLeft = measureFrame.rhythmStartX
+  const gridRight = measureFrame.rhythmEndX
+  const gridWidth = measureFrame.rhythmWidth
   const gridTop = y + 8
   const gridBottom = y + 88
   const pulseWidth = gridWidth / pulseCount
@@ -439,8 +439,6 @@ export default function ScoreRenderer({
       const isFirstMeasureOfSystem = measureInSystem === 0
       const staveWidth = 372
 
-      drawPulseGridOverlay(context as any, x, y, staveWidth, timeSignature, measureIndex)
-
       const stave = new Stave(x, y, staveWidth)
 
       if (isFirstMeasureOfSystem) {
@@ -452,7 +450,16 @@ export default function ScoreRenderer({
         stave.addTimeSignature(timeSignature)
       }
 
-      stave.setContext(context).draw()
+      stave.setContext(context)
+      const measureFrame = createMeasureFrame({
+        stave,
+        measureIndex,
+        isFirstMeasureOfSystem,
+        x,
+        staveWidth,
+      })
+      drawPulseGridOverlay(context as any, y, timeSignature, measureIndex, measureFrame)
+      stave.draw()
 
       if (showHarmonyOverlay && harmonyProgression.length > 0) {
         const harmonyLabel = harmonyProgression[measureIndex % harmonyProgression.length]
@@ -491,7 +498,7 @@ export default function ScoreRenderer({
       const normalBeams = getMeterAwareBeams(vexNotes, measureWithPadding, timeSignature)
       const tripletResult = getTripletTupletsAndBeams(vexNotes, measureWithPadding)
       const ratioResult = getRatioTupletsAndBeams(vexNotes, measureWithPadding)
-            const beams = [...normalBeams, ...tripletResult.beams, ...ratioResult.beams]
+      const beams = [...normalBeams, ...tripletResult.beams, ...ratioResult.beams]
       const tuplets = [...tripletResult.tuplets, ...ratioResult.tuplets]
 
       new Formatter().joinVoices([voice]).format([voice], staveWidth - 92)
@@ -507,7 +514,6 @@ export default function ScoreRenderer({
   }, [notes, timeSignature, keySignature, harmonyProgression, showHarmonyOverlay])
 
   return (
-
     <div
       style={{
         marginTop: 16,
