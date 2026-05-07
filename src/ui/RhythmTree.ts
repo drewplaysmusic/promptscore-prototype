@@ -130,8 +130,68 @@ export function createRatioTree(actual: number, normal: number, label = `${actua
   }
 }
 
+export function createRepeatedRatioTree({
+  actual,
+  normal,
+  repeatCount = 4,
+  label = `${actual}:${normal}`,
+}: {
+  actual: number
+  normal: number
+  repeatCount?: number
+  label?: string
+}): RhythmTree {
+  const safeActual = Math.max(1, actual)
+  const safeRepeatCount = Math.max(1, repeatCount)
+  const ratio: RhythmRatio = {
+    actual: safeActual,
+    normal: Math.max(1, normal),
+    label,
+  }
+  const regionSize = 1 / safeRepeatCount
+
+  const children = Array.from({ length: safeRepeatCount }, (_, regionIndex) => {
+    const regionStart = regionIndex * regionSize
+    const regionEnd = regionStart + regionSize
+    const noteSize = regionSize / safeActual
+
+    const regionChildren = Array.from({ length: safeActual }, (_, noteIndex) => {
+      const startRatio = regionStart + noteIndex * noteSize
+      const endRatio = startRatio + noteSize
+
+      return createRhythmNode({
+        id: `${label}-beat-${regionIndex + 1}-note-${noteIndex + 1}`,
+        type: 'note',
+        startRatio,
+        endRatio,
+        ratio,
+      })
+    })
+
+    return createRhythmNode({
+      id: `${label}-beat-${regionIndex + 1}`,
+      type: 'division',
+      startRatio: regionStart,
+      endRatio: regionEnd,
+      ratio,
+      children: regionChildren,
+    })
+  })
+
+  return {
+    measureCount: 1,
+    root: createRhythmNode({
+      id: 'measure-1',
+      type: 'measure',
+      startRatio: 0,
+      endRatio: 1,
+      children,
+    }),
+  }
+}
+
 export function createTripletTree(): RhythmTree {
-  return createRatioTree(3, 2, 'triplet-3:2')
+  return createRepeatedRatioTree({ actual: 3, normal: 2, repeatCount: 4, label: 'triplet-3:2' })
 }
 
 export function createNestedRatioTree({
