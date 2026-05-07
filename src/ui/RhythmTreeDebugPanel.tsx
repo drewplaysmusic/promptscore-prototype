@@ -8,6 +8,8 @@ import {
   flattenRhythmTree,
   type RhythmTree,
 } from './RhythmTree'
+import { rhythmTreeToNoteEvents, summarizeRhythmTreeNoteEvents } from './RhythmTreeToNoteEvents'
+import ScoreRenderer from './ScoreRenderer'
 
 type RhythmTreePreset = 'quarters' | 'eighths' | 'triplets' | 'quintuplets' | 'septuplets' | 'ninelets'
 
@@ -28,6 +30,8 @@ export default function RhythmTreeDebugPanel() {
   const [preset, setPreset] = useState<RhythmTreePreset>('quarters')
   const tree = useMemo(() => buildPresetTree(preset), [preset])
   const leaves = useMemo(() => flattenRhythmTree(tree), [tree])
+  const notationNotes = useMemo(() => rhythmTreeToNoteEvents(tree, { pitch: 'C', measure: 1 }), [tree])
+  const notationSummary = useMemo(() => summarizeRhythmTreeNoteEvents(notationNotes), [notationNotes])
 
   return (
     <div
@@ -54,7 +58,7 @@ export default function RhythmTreeDebugPanel() {
             RhythmTree Debug
           </div>
           <div style={{ fontSize: 12, color: '#71717a', marginTop: 2 }}>
-            {describeRhythmTree(tree)}
+            {describeRhythmTree(tree)} {notationSummary}
           </div>
         </div>
 
@@ -170,6 +174,13 @@ export default function RhythmTreeDebugPanel() {
               {leaf.ratio ? <div>{leaf.ratio.label}</div> : null}
             </div>
           ))}
+        </div>
+
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: '#52525b', textTransform: 'uppercase', marginBottom: 8 }}>
+            RhythmTree Notation Preview
+          </div>
+          <ScoreRenderer notes={notationNotes} timeSignature="4/4" keySignature="C major" />
         </div>
       </div>
     </div>
