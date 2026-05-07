@@ -1,3 +1,4 @@
+import RhythmTreeDebugPanel from './RhythmTreeDebugPanel'
 import React, { useState } from 'react'
 import ScoreRenderer from './ScoreRenderer'
 import { generateMusicBrainResult } from './musicBrain'
@@ -501,6 +502,7 @@ export default function PromptScoreShell() {
           >
             <ScoreRenderer notes={notes} timeSignature={timeSignature} keySignature={keySignature} />
           </div>
+       <RhythmTreeDebugPanel />
         </section>
 
         <aside style={{ display: 'grid', gap: 12 }}>
