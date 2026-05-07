@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Accidental as VFAccidental, Beam, Dot, Formatter, Renderer, Stave, StaveNote, Tuplet, Voice } from 'vexflow'
-import { createMeasureFrame, type MeasureFrame } from './measureFrame'
 
 type DurationValue = 'Whole' | 'DottedHalf' | 'Half' | 'DottedQuarter' | 'Quarter' | 'DottedEighth' | 'Eighth' | '16th' | 'TripletEighth'
 type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
@@ -11,6 +10,10 @@ type KeySignatureValue =
   | 'F major' | 'Bb major' | 'Eb major' | 'Ab major' | 'Db major' | 'Gb major' | 'Cb major'
   | 'A minor' | 'E minor' | 'B minor' | 'F# minor' | 'C# minor' | 'G# minor' | 'D# minor' | 'A# minor'
   | 'D minor' | 'G minor' | 'C minor' | 'F minor' | 'Bb minor' | 'Eb minor' | 'Ab minor'
+
+type TupletLabelMode = 'count' | 'ratio' | 'off'
+
+const TUPLET_LABEL_MODE: TupletLabelMode = 'count'
 
 type NoteEvent = {
   duration: DurationValue
@@ -136,18 +139,19 @@ function getSubdivisionCountForGrid(timeSignature: TimeSignatureValue): number {
 
 function drawPulseGridOverlay(
   context: any,
+  x: number,
   y: number,
+  staveWidth: number,
   timeSignature: TimeSignatureValue,
   measureIndex: number,
-  measureFrame: MeasureFrame,
 ) {
   if (!context || typeof context.beginPath !== 'function') return
 
   const pulseCount = getPulseCountForGrid(timeSignature)
   const subdivisionCount = getSubdivisionCountForGrid(timeSignature)
-  const gridLeft = measureFrame.rhythmStartX
-  const gridRight = measureFrame.rhythmEndX
-  const gridWidth = measureFrame.rhythmWidth
+  const gridLeft = x + 10
+  const gridRight = x + staveWidth - 10
+  const gridWidth = gridRight - gridLeft
   const gridTop = y + 8
   const gridBottom = y + 88
   const pulseWidth = gridWidth / pulseCount
@@ -351,12 +355,13 @@ function getRatioTupletsAndBeams(vexNotes: StaveNote[], notesForMeasure: NoteEve
 
     const tupletNumber = parseTupletNumber(group.notes[0]) ?? group.vexNotes.length
     if (tupletNumber >= 3) {
-      tuplets.push(
-        new Tuplet(group.vexNotes, {
-          num_notes: tupletNumber,
-          notes_occupied: getTupletNotesOccupied(tupletNumber),
-        }),
-      )
+     tuplets.push(
+  new Tuplet(group.vexNotes, {
+    num_notes: TUPLET_LABEL_MODE === 'off' ? undefined : tupletNumber,
+    notes_occupied: getTupletNotesOccupied(tupletNumber),
+    ratioed: TUPLET_LABEL_MODE === 'ratio',
+  } as any),
+)
     }
   })
 
@@ -439,6 +444,8 @@ export default function ScoreRenderer({
       const isFirstMeasureOfSystem = measureInSystem === 0
       const staveWidth = 372
 
+      drawPulseGridOverlay(context as any, x, y, staveWidth, timeSignature, measureIndex)
+
       const stave = new Stave(x, y, staveWidth)
 
       if (isFirstMeasureOfSystem) {
@@ -450,16 +457,7 @@ export default function ScoreRenderer({
         stave.addTimeSignature(timeSignature)
       }
 
-      stave.setContext(context)
-      const measureFrame = createMeasureFrame({
-        stave,
-        measureIndex,
-        isFirstMeasureOfSystem,
-        x,
-        staveWidth,
-      })
-      drawPulseGridOverlay(context as any, y, timeSignature, measureIndex, measureFrame)
-      stave.draw()
+      stave.setContext(context).draw()
 
       if (showHarmonyOverlay && harmonyProgression.length > 0) {
         const harmonyLabel = harmonyProgression[measureIndex % harmonyProgression.length]
@@ -498,7 +496,7 @@ export default function ScoreRenderer({
       const normalBeams = getMeterAwareBeams(vexNotes, measureWithPadding, timeSignature)
       const tripletResult = getTripletTupletsAndBeams(vexNotes, measureWithPadding)
       const ratioResult = getRatioTupletsAndBeams(vexNotes, measureWithPadding)
-      const beams = [...normalBeams, ...tripletResult.beams, ...ratioResult.beams]
+            const beams = [...normalBeams, ...tripletResult.beams, ...ratioResult.beams]
       const tuplets = [...tripletResult.tuplets, ...ratioResult.tuplets]
 
       new Formatter().joinVoices([voice]).format([voice], staveWidth - 92)
@@ -514,6 +512,7 @@ export default function ScoreRenderer({
   }, [notes, timeSignature, keySignature, harmonyProgression, showHarmonyOverlay])
 
   return (
+
     <div
       style={{
         marginTop: 16,

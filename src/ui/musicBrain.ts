@@ -675,10 +675,12 @@ function buildBeginnerMelodyEvents(
   let eventIndex = 0
   let previousScaleIndex: number | null = null
   const plannedDurations = buildPulseGridPlannedDurations(
-    timeSignature,
-    rhythmPattern,
-    measureCount,
-  )
+  timeSignature,
+  rhythmPattern,
+  measureCount,
+  96,
+  prompt,
+)
 
   plannedDurations.forEach((plannedDuration, i) => {
     const isLast = i === plannedDurations.length - 1
