@@ -1,37 +1,18 @@
 import React, { useMemo, useState } from 'react'
-import {
-  createEqualDivisionTree,
-  createNestedNineletTree,
-  createQuarterDivisionTree,
-  createRatioTree,
-  describeRhythmTree,
-  flattenRhythmTree,
-  type RhythmTree,
-} from './RhythmTree'
-import { rhythmTreeToNoteEvents, summarizeRhythmTreeNoteEvents } from './RhythmTreeToNoteEvents'
+import { describeRhythmTree, flattenRhythmTree } from './RhythmTree'
+import { runRhythmFunnel } from './RhythmFunnel'
 import ScoreRenderer from './ScoreRenderer'
-
-type RhythmTreePreset = 'quarters' | 'eighths' | 'triplets' | 'quintuplets' | 'septuplets' | 'ninelets'
-
-function buildPresetTree(preset: RhythmTreePreset): RhythmTree {
-  if (preset === 'eighths') return createEqualDivisionTree(8, 'eighth')
-  if (preset === 'triplets') return createRatioTree(3, 2, 'triplet-3:2')
-  if (preset === 'quintuplets') return createRatioTree(5, 4, 'quintuplet-5:4')
-  if (preset === 'septuplets') return createRatioTree(7, 4, 'septuplet-7:4')
-  if (preset === 'ninelets') return createNestedNineletTree()
-  return createQuarterDivisionTree()
-}
 
 function formatRatio(value: number): string {
   return value.toFixed(4).replace(/0+$/, '').replace(/\.$/, '')
 }
 
 export default function RhythmTreeDebugPanel() {
-  const [preset, setPreset] = useState<RhythmTreePreset>('quarters')
-  const tree = useMemo(() => buildPresetTree(preset), [preset])
+  const [prompt, setPrompt] = useState('eighth note triplets in C')
+  const funnel = useMemo(() => runRhythmFunnel(prompt), [prompt])
+  const tree = funnel.tree
   const leaves = useMemo(() => flattenRhythmTree(tree), [tree])
-  const notationNotes = useMemo(() => rhythmTreeToNoteEvents(tree, { pitch: 'C', measure: 1 }), [tree])
-  const notationSummary = useMemo(() => summarizeRhythmTreeNoteEvents(notationNotes), [notationNotes])
+  const notationNotes = funnel.notes
 
   return (
     <div
@@ -47,39 +28,75 @@ export default function RhythmTreeDebugPanel() {
         style={{
           padding: '12px 14px',
           borderBottom: '1px solid #e4e4e7',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
+          display: 'grid',
+          gap: 10,
         }}
       >
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 800, color: '#18181b', textTransform: 'uppercase' }}>
-            RhythmTree Debug
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#18181b', textTransform: 'uppercase' }}>
+              RhythmFunnel Lab
+            </div>
+            <div style={{ fontSize: 12, color: '#71717a', marginTop: 2 }}>
+              {funnel.summary}
+            </div>
           </div>
-          <div style={{ fontSize: 12, color: '#71717a', marginTop: 2 }}>
-            {describeRhythmTree(tree)} {notationSummary}
+
+          <div
+            style={{
+              border: `1px solid ${funnel.valid ? '#bbf7d0' : '#fecaca'}`,
+              background: funnel.valid ? '#f0fdf4' : '#fef2f2',
+              color: funnel.valid ? '#166534' : '#991b1b',
+              borderRadius: 999,
+              padding: '5px 9px',
+              fontSize: 11,
+              fontWeight: 800,
+              textTransform: 'uppercase',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {funnel.valid ? 'Valid' : 'Check'} · {funnel.intent.kind}
           </div>
         </div>
 
-        <select
-          value={preset}
-          onChange={(event) => setPreset(event.target.value as RhythmTreePreset)}
+        <input
+          value={prompt}
+          onChange={(event) => setPrompt(event.target.value)}
+          placeholder="Try: eighth note triplets in C, 5 over 4 in D, nested ninelet in C"
           style={{
+            width: '100%',
+            boxSizing: 'border-box',
             border: '1px solid #d4d4d8',
-            borderRadius: 10,
-            padding: '7px 10px',
+            borderRadius: 12,
+            padding: '10px 12px',
             background: '#fafafa',
-            fontSize: 13,
+            fontSize: 14,
+            outline: 'none',
           }}
-        >
-          <option value="quarters">Quarters</option>
-          <option value="eighths">Eighths</option>
-          <option value="triplets">Triplets 3:2</option>
-          <option value="quintuplets">Quintuplets 5:4</option>
-          <option value="septuplets">Septuplets 7:4</option>
-          <option value="ninelets">Nested Ninelets</option>
-        </select>
+        />
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+          <div style={{ border: '1px solid #e4e4e7', borderRadius: 10, padding: 8, background: '#fafafa', fontSize: 11 }}>
+            <div style={{ fontWeight: 800, color: '#18181b' }}>Intent</div>
+            <div>{funnel.intent.label}</div>
+          </div>
+          <div style={{ border: '1px solid #e4e4e7', borderRadius: 10, padding: 8, background: '#fafafa', fontSize: 11 }}>
+            <div style={{ fontWeight: 800, color: '#18181b' }}>Confidence</div>
+            <div>{Math.round(funnel.intent.confidence * 100)}%</div>
+          </div>
+          <div style={{ border: '1px solid #e4e4e7', borderRadius: 10, padding: 8, background: '#fafafa', fontSize: 11 }}>
+            <div style={{ fontWeight: 800, color: '#18181b' }}>Tree</div>
+            <div>{describeRhythmTree(tree)}</div>
+          </div>
+        </div>
+
+        {funnel.warnings.length > 0 ? (
+          <div style={{ border: '1px solid #fecaca', borderRadius: 10, padding: 8, background: '#fef2f2', fontSize: 12, color: '#991b1b' }}>
+            {funnel.warnings.map((warning) => (
+              <div key={warning}>⚠ {warning}</div>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div style={{ padding: 14 }}>
@@ -178,7 +195,7 @@ export default function RhythmTreeDebugPanel() {
 
         <div style={{ marginTop: 14 }}>
           <div style={{ fontSize: 12, fontWeight: 800, color: '#52525b', textTransform: 'uppercase', marginBottom: 8 }}>
-            RhythmTree Notation Preview
+            RhythmFunnel Notation Preview
           </div>
           <ScoreRenderer notes={notationNotes} timeSignature="4/4" keySignature="C major" />
         </div>
