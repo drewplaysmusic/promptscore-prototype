@@ -63,9 +63,17 @@ function getRatioLabel(node: RhythmNode): string | undefined {
   return `${node.ratio.actual}`
 }
 
+function getRepeatedRegionKey(node: RhythmNode): string {
+  const beatMatch = node.id.match(/(.+)-note-\d+$/)
+  if (beatMatch) return beatMatch[1]
+  const nestedMatch = node.id.match(/nested-(\d+)-\d+/)
+  if (nestedMatch) return `nested-${nestedMatch[1]}`
+  return node.id
+}
+
 function getRatioGroupId(node: RhythmNode, measure: number): string | undefined {
   if (!node.ratio) return undefined
-  return `rhythm-tree-m${measure}-${node.ratio.label}`
+  return `rhythm-tree-m${measure}-${node.ratio.label}-${getRepeatedRegionKey(node)}`
 }
 
 export function rhythmTreeToNoteEvents(
