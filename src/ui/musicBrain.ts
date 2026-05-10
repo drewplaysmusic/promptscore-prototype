@@ -1,3 +1,4 @@
+import { runRhythmFunnel } from './RhythmFunnel'
 import {
   createMusicXYMeasureGrid,
   createRatioSpans,
@@ -737,6 +738,31 @@ function placeEventAtCursor(event: Omit<NoteEvent, 'measure' | 'beat'>, cursor: 
   return { note, nextMeasure: measure, nextBeat }
 }
 
+function isRhythmFunnelPrompt(prompt: string): boolean {
+  const hasRhythmWord =
+    prompt.includes('triplet') ||
+    prompt.includes('tuplet') ||
+    prompt.includes('quintuplet') ||
+    prompt.includes('septuplet') ||
+    prompt.includes('sextuplet') ||
+    prompt.includes('ninelet') ||
+    /\b\d+\s*(?:over|:)\s*\d+\b/.test(prompt)
+
+  const hasCompositionWord =
+    prompt.includes('melody') ||
+    prompt.includes('phrase') ||
+    prompt.includes('piece') ||
+    prompt.includes('style') ||
+    prompt.includes('baroque') ||
+    prompt.includes('classical') ||
+    prompt.includes('romantic') ||
+    prompt.includes('jazz') ||
+    prompt.includes('folk') ||
+    prompt.includes('country')
+
+  return hasRhythmWord && !hasCompositionWord
+}
+
 export function generateMusicBrainResult(promptText: string, defaults: BrainDefaults): MusicBrainResult {
   if (isScaleExercisePrompt(promptText)) {
     const exercise = generateScaleExercise(promptText)
@@ -754,6 +780,21 @@ export function generateMusicBrainResult(promptText: string, defaults: BrainDefa
     }
   }
   const normalizedPrompt = normalizePrompt(promptText)
+    if (isRhythmFunnelPrompt(normalizedPrompt)) {
+    const funnel = runRhythmFunnel(normalizedPrompt)
+
+    return {
+      notes: funnel.notes,
+      timeSignature: defaults.timeSignature,
+      keySignature: 'C major',
+      harmony: {
+        progression: [],
+        label: 'rhythm funnel',
+        description: 'Rhythm-only prompt routed through RhythmFunnel.',
+      },
+      summary: funnel.summary,
+    }
+  }
   const style = detectStyle(normalizedPrompt)
   const scaleSystem = detectScaleSystem(normalizedPrompt, style)
   const tonalCenter = detectTonalCenter(normalizedPrompt, style === 'folk' ? 'A' : 'C')

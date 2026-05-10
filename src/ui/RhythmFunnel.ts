@@ -3,6 +3,7 @@ import {
   createNestedNineletTree,
   createQuarterDivisionTree,
   createRatioTree,
+  createRepeatedRatioTree,
   flattenRhythmTree,
   type RhythmTree,
 } from './RhythmTree'
@@ -52,6 +53,17 @@ function detectPitch(prompt: string): RhythmTreePitchValue {
     return candidate
   }
   return 'C'
+}
+
+function detectMeasureCount(prompt: string): number {
+  const match = prompt.match(/(\d+)\s*(measure|measures|bar|bars)/)
+
+  if (!match) return 1
+
+  const parsed = Number(match[1])
+  if (!Number.isFinite(parsed)) return 1
+
+  return Math.min(Math.max(parsed, 1), 32)
 }
 
 export function detectRhythmIntent(prompt: string): RhythmIntent {
@@ -134,10 +146,20 @@ export function validateRhythmTree(tree: RhythmTree): string[] {
 export function runRhythmFunnel(prompt: string): RhythmFunnelResult {
   const normalized = normalizePrompt(prompt)
   const pitch = detectPitch(normalized)
+  const measureCount = detectMeasureCount(normalized)
   const intent = detectRhythmIntent(normalized)
   const tree = buildRhythmTreeFromIntent(intent)
   const warnings = validateRhythmTree(tree)
-  const notes = rhythmTreeToNoteEvents(tree, { pitch, measure: 1 })
+  const notes: RhythmTreeNoteEvent[] = []
+
+for (let measure = 1; measure <= measureCount; measure += 1) {
+  notes.push(
+    ...rhythmTreeToNoteEvents(tree, {
+      pitch,
+      measure,
+    }),
+  )
+}
   const noteSummary = summarizeRhythmTreeNoteEvents(notes)
 
   return {
@@ -146,6 +168,6 @@ export function runRhythmFunnel(prompt: string): RhythmFunnelResult {
     notes,
     valid: warnings.length === 0,
     warnings,
-    summary: `RhythmFunnel detected ${intent.label} with ${Math.round(intent.confidence * 100)}% confidence. ${noteSummary}`,
+    summary: `RhythmFunnel detected ${intent.label} across ${measureCount} measure(s) with ${Math.round(intent.confidence * 100)}% confidence. ${noteSummary}`,
   }
 }
