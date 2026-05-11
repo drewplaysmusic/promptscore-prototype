@@ -10,6 +10,13 @@ import {
 
 type CursorPitchValue = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B'
 
+type CursorScoreEvent = {
+  duration: CursorDurationValue
+  pitch: CursorPitchValue
+  measure: number
+  beat: number
+}
+
 const DURATIONS: CursorDurationValue[] = [
   'Whole',
   'DottedHalf',
@@ -28,27 +35,55 @@ function formatTick(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2)
 }
 
-export default function CursorDebugPanel() {
+export default function CursorDebugPanel({
+  onSendToScore,
+}: {
+  onSendToScore?: (events: CursorScoreEvent[]) => void
+}) {
   const [timeSignature, setTimeSignature] = useState<CursorTimeSignatureValue>('4/4')
   const [selectedDuration, setSelectedDuration] = useState<CursorDurationValue>('Quarter')
   const [selectedPitch, setSelectedPitch] = useState<CursorPitchValue>('C')
   const [durations, setDurations] = useState<CursorDurationValue[]>([])
+  const [liveSendEnabled, setLiveSendEnabled] = useState(false)
 
   const cursor = useMemo(() => createMusicCursor({ timeSignature }), [timeSignature])
   const placed = useMemo(() => placeDurationsFromCursor(cursor, durations), [cursor, durations])
   const activeCursor = placed.nextCursor
   const selectedTicks = getDurationTicks(selectedDuration, cursor.ticksPerQuarter)
 
+  function getScoreEvents(nextDurations = durations): CursorScoreEvent[] {
+    const nextPlaced = placeDurationsFromCursor(cursor, nextDurations)
+    return nextPlaced.events.map((event) => ({
+      duration: event.duration,
+      pitch: selectedPitch,
+      measure: event.measure,
+      beat: event.beat,
+    }))
+  }
+
+  function sendToScore(nextDurations = durations) {
+    onSendToScore?.(getScoreEvents(nextDurations))
+  }
+
   function addDuration(duration = selectedDuration) {
-    setDurations((current) => [...current, duration])
+    setDurations((current) => {
+      const nextDurations = [...current, duration]
+      if (liveSendEnabled) sendToScore(nextDurations)
+      return nextDurations
+    })
   }
 
   function undoLast() {
-    setDurations((current) => current.slice(0, -1))
+    setDurations((current) => {
+      const nextDurations = current.slice(0, -1)
+      if (liveSendEnabled) sendToScore(nextDurations)
+      return nextDurations
+    })
   }
 
   function clearAll() {
     setDurations([])
+    if (liveSendEnabled) onSendToScore?.([])
   }
 
   return (
@@ -79,7 +114,7 @@ export default function CursorDebugPanel() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <select
               value={timeSignature}
               onChange={(event) => setTimeSignature(event.target.value as CursorTimeSignatureValue)}
@@ -93,6 +128,27 @@ export default function CursorDebugPanel() {
 
             <button type="button" onClick={undoLast}>Undo</button>
             <button type="button" onClick={clearAll}>Clear</button>
+            <button type="button" onClick={() => sendToScore()}>Send To Score</button>
+            <button
+              type="button"
+              onClick={() => {
+                setLiveSendEnabled((enabled) => {
+                  const nextEnabled = !enabled
+                  if (!enabled) sendToScore()
+                  return nextEnabled
+                })
+              }}
+              style={{
+                border: liveSendEnabled ? '1px solid #111827' : '1px solid #d4d4d8',
+                background: liveSendEnabled ? '#111827' : '#fafafa',
+                color: liveSendEnabled ? '#ffffff' : '#111827',
+                borderRadius: 10,
+                padding: '7px 10px',
+                fontWeight: 800,
+              }}
+            >
+              Live Send: {liveSendEnabled ? 'On' : 'Off'}
+            </button>
           </div>
         </div>
 
