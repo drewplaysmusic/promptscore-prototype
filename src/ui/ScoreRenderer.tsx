@@ -1,6 +1,6 @@
-import { createMeasureFrame, type MeasureFrame } from './measureFrame'
 import React, { useEffect, useRef, useState } from 'react'
 import { Accidental as VFAccidental, Beam, Dot, Formatter, Renderer, Stave, StaveNote, Tuplet, Voice } from 'vexflow'
+import { createMeasureFrame, type MeasureFrame } from './measureFrame'
 
 type DurationValue = 'Whole' | 'DottedHalf' | 'Half' | 'DottedQuarter' | 'Quarter' | 'DottedEighth' | 'Eighth' | '16th' | 'TripletEighth'
 type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
@@ -13,8 +13,12 @@ type KeySignatureValue =
   | 'D minor' | 'G minor' | 'C minor' | 'F minor' | 'Bb minor' | 'Eb minor' | 'Ab minor'
 
 type TupletLabelMode = 'count' | 'ratio' | 'off'
-
 const TUPLET_LABEL_MODE: TupletLabelMode = 'count'
+
+type ScoreCursorPosition = {
+  measure: number
+  beat: number
+}
 
 type NoteEvent = {
   duration: DurationValue
@@ -140,24 +144,23 @@ function getSubdivisionCountForGrid(timeSignature: TimeSignatureValue): number {
 
 function drawPulseGridOverlay(
   context: any,
-y: number,
-timeSignature: TimeSignatureValue,
-measureIndex: number,
-measureFrame: MeasureFrame,
+  y: number,
+  timeSignature: TimeSignatureValue,
+  measureIndex: number,
+  measureFrame: MeasureFrame,
 ) {
   if (!context || typeof context.beginPath !== 'function') return
 
   const pulseCount = getPulseCountForGrid(timeSignature)
   const subdivisionCount = getSubdivisionCountForGrid(timeSignature)
   const gridLeft = measureFrame.rhythmStartX
-const gridRight = measureFrame.rhythmEndX
-const gridWidth = measureFrame.rhythmWidth
+  const gridRight = measureFrame.rhythmEndX
+  const gridWidth = measureFrame.rhythmWidth
   const gridTop = y + 8
   const gridBottom = y + 88
   const pulseWidth = gridWidth / pulseCount
 
   context.save()
-
   context.setStrokeStyle('#e5e7eb')
   context.setLineWidth(1)
   context.beginPath()
@@ -180,9 +183,7 @@ const gridWidth = measureFrame.rhythmWidth
       context.setFont('Arial', 9, 'normal')
       context.setFillStyle('#94a3b8')
       context.fillText(`${measureIndex + 1}.${pulse + 1}`, pulseX + 4, gridTop - 3)
-    }
 
-    if (pulse < pulseCount) {
       for (let subdivision = 1; subdivision < subdivisionCount; subdivision += 1) {
         const subdivisionX = pulseX + (pulseWidth * subdivision) / subdivisionCount
         context.setStrokeStyle('#eef2f7')
@@ -195,6 +196,31 @@ const gridWidth = measureFrame.rhythmWidth
     }
   }
 
+  context.restore()
+}
+
+function drawScoreCursor(
+  context: any,
+  y: number,
+  timeSignature: TimeSignatureValue,
+  measureIndex: number,
+  measureFrame: MeasureFrame,
+  cursorPosition?: ScoreCursorPosition,
+) {
+  if (!context || !cursorPosition) return
+  if (cursorPosition.measure !== measureIndex + 1) return
+
+  const pulseCount = getPulseCountForGrid(timeSignature)
+  const beatRatio = Math.max(0, Math.min(1, (cursorPosition.beat - 1) / pulseCount))
+  const cursorX = measureFrame.rhythmStartX + beatRatio * measureFrame.rhythmWidth
+
+  context.save()
+  context.setStrokeStyle('#111827')
+  context.setLineWidth(2)
+  context.beginPath()
+  context.moveTo(cursorX, y + 4)
+  context.lineTo(cursorX, y + 94)
+  context.stroke()
   context.restore()
 }
 
@@ -277,9 +303,7 @@ function getMeterAwareBeams(vexNotes: StaveNote[], notesForMeasure: NoteEvent[],
   let activeGroup: StaveNote[] = []
 
   function flushGroup() {
-    if (activeGroup.length >= 2) {
-      beams.push(new Beam(activeGroup))
-    }
+    if (activeGroup.length >= 2) beams.push(new Beam(activeGroup))
     activeGroup = []
   }
 
@@ -289,17 +313,11 @@ function getMeterAwareBeams(vexNotes: StaveNote[], notesForMeasure: NoteEvent[],
     const isRatioGrouped = Boolean(note.tupletGroupId || note.ratioLabel || note.bracketGroupId)
     const crossesBoundary = noteCrossesBeamBoundary(note, beatStart, boundarySize)
 
-    if (activeBoundary !== null && boundaryIndex !== activeBoundary) {
-      flushGroup()
-    }
-
+    if (activeBoundary !== null && boundaryIndex !== activeBoundary) flushGroup()
     activeBoundary = boundaryIndex
 
-    if (isBeamable(note) && !isRatioGrouped && !crossesBoundary) {
-      activeGroup.push(vexNotes[index])
-    } else {
-      flushGroup()
-    }
+    if (isBeamable(note) && !isRatioGrouped && !crossesBoundary) activeGroup.push(vexNotes[index])
+    else flushGroup()
 
     fallbackBeatCursor += getDurationBeats(note.duration)
   })
@@ -352,16 +370,16 @@ function getRatioTupletsAndBeams(vexNotes: StaveNote[], notesForMeasure: NoteEve
     if (group.vexNotes.length < 2) return
 
     beams.push(new Beam(group.vexNotes))
-
     const tupletNumber = parseTupletNumber(group.notes[0]) ?? group.vexNotes.length
+
     if (tupletNumber >= 3) {
-     tuplets.push(
-  new Tuplet(group.vexNotes, {
-    num_notes: TUPLET_LABEL_MODE === 'off' ? undefined : tupletNumber,
-    notes_occupied: getTupletNotesOccupied(tupletNumber),
-    ratioed: TUPLET_LABEL_MODE === 'ratio',
-  } as any),
-)
+      tuplets.push(
+        new Tuplet(group.vexNotes, {
+          num_notes: TUPLET_LABEL_MODE === 'off' ? undefined : tupletNumber,
+          notes_occupied: getTupletNotesOccupied(tupletNumber),
+          ratioed: TUPLET_LABEL_MODE === 'ratio',
+        } as any),
+      )
     }
   })
 
@@ -403,12 +421,14 @@ export default function ScoreRenderer({
   keySignature,
   harmonyProgression = [],
   showHarmonyOverlay = false,
+  cursorPosition,
 }: {
   notes: NoteEvent[]
   timeSignature: TimeSignatureValue
   keySignature: KeySignatureValue
   harmonyProgression?: string[]
   showHarmonyOverlay?: boolean
+  cursorPosition?: ScoreCursorPosition
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [zoom, setZoom] = useState(1)
@@ -421,7 +441,6 @@ export default function ScoreRenderer({
     if (notes.length === 0) return
 
     const measureGroups = groupNotesByMeasure(notes)
-
     const pageWidth = 1180
     const pageHeight = 760
     const leftMargin = 36
@@ -438,36 +457,22 @@ export default function ScoreRenderer({
     measureGroups.forEach((measureNotes, measureIndex) => {
       const systemIndex = Math.floor(measureIndex / measuresPerSystem)
       const measureInSystem = measureIndex % measuresPerSystem
-
       const y = topMargin + systemIndex * systemGap
       const x = leftMargin + measureInSystem * 372
       const isFirstMeasureOfSystem = measureInSystem === 0
       const staveWidth = 372
-
-      
-
       const stave = new Stave(x, y, staveWidth)
 
-      if (isFirstMeasureOfSystem) {
-        stave.addClef('treble')
-      }
-
+      if (isFirstMeasureOfSystem) stave.addClef('treble')
       if (measureIndex === 0) {
         stave.addKeySignature(getVexKeySignature(keySignature))
         stave.addTimeSignature(timeSignature)
       }
 
       stave.setContext(context)
-    const measureFrame = createMeasureFrame({
-    stave,
-  measureIndex,
-  isFirstMeasureOfSystem,
-  x,
-  staveWidth,
-})
-
-drawPulseGridOverlay(context as any, y, timeSignature, measureIndex, measureFrame)
-stave.draw()
+      const measureFrame = createMeasureFrame({ stave, measureIndex, isFirstMeasureOfSystem, x, staveWidth })
+      drawPulseGridOverlay(context as any, y, timeSignature, measureIndex, measureFrame)
+      stave.draw()
 
       if (showHarmonyOverlay && harmonyProgression.length > 0) {
         const harmonyLabel = harmonyProgression[measureIndex % harmonyProgression.length]
@@ -487,15 +492,8 @@ stave.draw()
         })
 
         const accidental = getVexAccidental(note.accidental)
-
-        if (!note.isRest && accidental) {
-          vexNote.addModifier(new VFAccidental(accidental), 0)
-        }
-
-        if (isDottedDuration(note.duration)) {
-          Dot.buildAndAttach([vexNote])
-        }
-
+        if (!note.isRest && accidental) vexNote.addModifier(new VFAccidental(accidental), 0)
+        if (isDottedDuration(note.duration)) Dot.buildAndAttach([vexNote])
         return vexNote
       })
 
@@ -506,23 +504,19 @@ stave.draw()
       const normalBeams = getMeterAwareBeams(vexNotes, measureWithPadding, timeSignature)
       const tripletResult = getTripletTupletsAndBeams(vexNotes, measureWithPadding)
       const ratioResult = getRatioTupletsAndBeams(vexNotes, measureWithPadding)
-            const beams = [...normalBeams, ...tripletResult.beams, ...ratioResult.beams]
+      const beams = [...normalBeams, ...tripletResult.beams, ...ratioResult.beams]
       const tuplets = [...tripletResult.tuplets, ...ratioResult.tuplets]
 
       new Formatter().joinVoices([voice]).format([voice], staveWidth - 92)
-
       voice.draw(context, stave)
-      beams.forEach((beam) => {
-        beam.setContext(context).draw()
-      })
-      tuplets.forEach((tuplet) => {
-        tuplet.setContext(context).draw()
-      })
+
+      beams.forEach((beam) => beam.setContext(context).draw())
+      tuplets.forEach((tuplet) => tuplet.setContext(context).draw())
+      drawScoreCursor(context as any, y, timeSignature, measureIndex, measureFrame, cursorPosition)
     })
-  }, [notes, timeSignature, keySignature, harmonyProgression, showHarmonyOverlay])
+  }, [notes, timeSignature, keySignature, harmonyProgression, showHarmonyOverlay, cursorPosition])
 
   return (
-
     <div
       style={{
         marginTop: 16,
@@ -549,16 +543,10 @@ stave.draw()
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button type="button" onClick={() => setZoom((z) => Math.max(0.75, z - 0.1))}>
-            −
-          </button>
+          <button type="button" onClick={() => setZoom((z) => Math.max(0.75, z - 0.1))}>−</button>
           <span style={{ fontSize: 13 }}>{Math.round(zoom * 100)}%</span>
-          <button type="button" onClick={() => setZoom((z) => Math.min(1.6, z + 0.1))}>
-            +
-          </button>
-          <button type="button" onClick={() => setZoom(1)}>
-            Fit
-          </button>
+          <button type="button" onClick={() => setZoom((z) => Math.min(1.6, z + 0.1))}>+</button>
+          <button type="button" onClick={() => setZoom(1)}>Fit</button>
         </div>
       </div>
 
