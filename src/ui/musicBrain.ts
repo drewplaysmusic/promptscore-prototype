@@ -740,13 +740,16 @@ function placeEventAtCursor(event: Omit<NoteEvent, 'measure' | 'beat'>, cursor: 
 
 function isRhythmFunnelPrompt(prompt: string): boolean {
   const hasRhythmWord =
-    prompt.includes('triplet') ||
-    prompt.includes('tuplet') ||
-    prompt.includes('quintuplet') ||
-    prompt.includes('septuplet') ||
-    prompt.includes('sextuplet') ||
-    prompt.includes('ninelet') ||
-    /\b\d+\s*(?:over|:)\s*\d+\b/.test(prompt)
+  prompt.includes('sixteenth') ||
+  prompt.includes('16th') ||
+  prompt.includes('16ths') ||
+  prompt.includes('triplet') ||
+  prompt.includes('tuplet') ||
+  prompt.includes('quintuplet') ||
+  prompt.includes('septuplet') ||
+  prompt.includes('sextuplet') ||
+  prompt.includes('ninelet') ||
+  /\b\d+\s*(?:over|:)\s*\d+\b/.test(prompt)
 
   const hasCompositionWord =
     prompt.includes('melody') ||

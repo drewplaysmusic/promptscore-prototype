@@ -17,6 +17,7 @@ import {
 export type RhythmIntentKind =
   | 'quarters'
   | 'eighths'
+  | 'sixteenths'
   | 'triplets'
   | 'quintuplets'
   | 'sextuplets'
@@ -97,22 +98,27 @@ export function detectRhythmIntent(prompt: string): RhythmIntent {
   }
 
   if (normalized.includes('septuplet') || normalized.includes('sevenlet')) {
-    return { kind: 'septuplets', label: 'septuplets 7:4', confidence: 0.9, actual: 7, normal: 4 }
-  }
+  return { kind: 'septuplets', label: 'septuplets 7:4', confidence: 0.9, actual: 7, normal: 4 }
+}
+
+if (normalized.includes('sixteenth') || normalized.includes('16th') || normalized.includes('16ths')) {
+  return { kind: 'sixteenths', label: 'sixteenth notes', confidence: 0.82 }
+}
 
   if (normalized.includes('eighth') || normalized.includes('8th')) {
     return { kind: 'eighths', label: 'eighth notes', confidence: 0.75 }
   }
 
   if (normalized.includes('quarter')) {
-    return { kind: 'quarters', label: 'quarter notes', confidence: 0.75 }
-  }
+  return { kind: 'quarters', label: 'quarter notes', confidence: 0.75 }
+}
 
-  return { kind: 'quarters', label: 'default quarter notes', confidence: 0.35 }
+return { kind: 'quarters', label: 'default quarter notes', confidence: 0.35 }
 }
 
 export function buildRhythmTreeFromIntent(intent: RhythmIntent): RhythmTree {
-  if (intent.kind === 'eighths') return createEqualDivisionTree(8, 'eighth')
+ if (intent.kind === 'sixteenths') return createEqualDivisionTree(16, 'sixteenth') 
+if (intent.kind === 'eighths') return createEqualDivisionTree(8, 'eighth')
   if (intent.kind === 'triplets') return createRepeatedRatioTree({ actual: intent.actual ?? 3, normal: intent.normal ?? 2, repeatCount: 4, label: `triplet-${intent.actual ?? 3}:${intent.normal ?? 2}` })
   if (intent.kind === 'quintuplets') return createRepeatedRatioTree({ actual: intent.actual ?? 5, normal: intent.normal ?? 4, repeatCount: 4, label: `quintuplet-${intent.actual ?? 5}:${intent.normal ?? 4}` })
   if (intent.kind === 'sextuplets') return createRepeatedRatioTree({ actual: intent.actual ?? 6, normal: intent.normal ?? 4, repeatCount: 4, label: `sextuplet-${intent.actual ?? 6}:${intent.normal ?? 4}` })
