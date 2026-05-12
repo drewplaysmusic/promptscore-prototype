@@ -17,6 +17,11 @@ type CursorScoreEvent = {
   beat: number
 }
 
+type CursorPositionEvent = {
+  measure: number
+  beat: number
+}
+
 const DURATIONS: CursorDurationValue[] = [
   'Whole',
   'DottedHalf',
@@ -37,8 +42,10 @@ function formatTick(value: number): string {
 
 export default function CursorDebugPanel({
   onSendToScore,
+  onCursorChange,
 }: {
   onSendToScore?: (events: CursorScoreEvent[]) => void
+  onCursorChange?: (cursor: CursorPositionEvent) => void
 }) {
   const [timeSignature, setTimeSignature] = useState<CursorTimeSignatureValue>('4/4')
   const [selectedDuration, setSelectedDuration] = useState<CursorDurationValue>('Quarter')
@@ -51,9 +58,12 @@ export default function CursorDebugPanel({
   const activeCursor = placed.nextCursor
   const selectedTicks = getDurationTicks(selectedDuration, cursor.ticksPerQuarter)
 
+  function getPlaced(nextDurations = durations) {
+    return placeDurationsFromCursor(cursor, nextDurations)
+  }
+
   function getScoreEvents(nextDurations = durations): CursorScoreEvent[] {
-    const nextPlaced = placeDurationsFromCursor(cursor, nextDurations)
-    return nextPlaced.events.map((event) => ({
+    return getPlaced(nextDurations).events.map((event) => ({
       duration: event.duration,
       pitch: selectedPitch,
       measure: event.measure,
@@ -61,13 +71,23 @@ export default function CursorDebugPanel({
     }))
   }
 
+  function notifyCursorChange(nextDurations = durations) {
+    const nextCursor = getPlaced(nextDurations).nextCursor
+    onCursorChange?.({
+      measure: nextCursor.measure,
+      beat: nextCursor.beat,
+    })
+  }
+
   function sendToScore(nextDurations = durations) {
     onSendToScore?.(getScoreEvents(nextDurations))
+    notifyCursorChange(nextDurations)
   }
 
   function addDuration(duration = selectedDuration) {
     setDurations((current) => {
       const nextDurations = [...current, duration]
+      notifyCursorChange(nextDurations)
       if (liveSendEnabled) sendToScore(nextDurations)
       return nextDurations
     })
@@ -76,6 +96,7 @@ export default function CursorDebugPanel({
   function undoLast() {
     setDurations((current) => {
       const nextDurations = current.slice(0, -1)
+      notifyCursorChange(nextDurations)
       if (liveSendEnabled) sendToScore(nextDurations)
       return nextDurations
     })
@@ -83,6 +104,7 @@ export default function CursorDebugPanel({
 
   function clearAll() {
     setDurations([])
+    onCursorChange?.({ measure: 1, beat: 1 })
     if (liveSendEnabled) onSendToScore?.([])
   }
 
