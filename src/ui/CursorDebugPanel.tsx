@@ -28,7 +28,16 @@ function formatTick(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2)
 }
 
-export default function CursorDebugPanel() {
+export default function CursorDebugPanel({
+  onSendToScore,
+}: {
+  onSendToScore?: (events: {
+    duration: CursorDurationValue
+    pitch: CursorPitchValue
+    measure: number
+    beat: number
+  }[]) => void
+}) {
   const [timeSignature, setTimeSignature] = useState<CursorTimeSignatureValue>('4/4')
   const [selectedDuration, setSelectedDuration] = useState<CursorDurationValue>('Quarter')
   const [selectedPitch, setSelectedPitch] = useState<CursorPitchValue>('C')
@@ -92,7 +101,22 @@ export default function CursorDebugPanel() {
             </select>
 
             <button type="button" onClick={undoLast}>Undo</button>
-            <button type="button" onClick={clearAll}>Clear</button>
+<button type="button" onClick={clearAll}>Clear</button>
+<button
+  type="button"
+  onClick={() =>
+    onSendToScore?.(
+      placed.events.map((event) => ({
+        duration: event.duration,
+        pitch: selectedPitch,
+        measure: event.measure,
+        beat: event.beat,
+      })),
+    )
+  }
+>
+  Send To Score
+</button>
           </div>
         </div>
 
