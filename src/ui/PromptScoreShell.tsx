@@ -1,3 +1,4 @@
+import CursorDebugPanel from './CursorDebugPanel'
 import RhythmTreeDebugPanel from './RhythmTreeDebugPanel'
 import React, { useState } from 'react'
 import ScoreRenderer from './ScoreRenderer'
@@ -500,9 +501,40 @@ export default function PromptScoreShell() {
               overflow: 'hidden',
             }}
           >
-            <ScoreRenderer notes={notes} timeSignature={timeSignature} keySignature={keySignature} />
+            <ScoreRenderer
+  notes={notes}
+  timeSignature={timeSignature}
+  keySignature={keySignature}
+  cursorPosition={{ measure: currentMeasure, beat: currentBeat }}
+/>
           </div>
        <RhythmTreeDebugPanel />
+       <CursorDebugPanel
+  onCursorChange={(cursor) => {
+    setCurrentMeasure(cursor.measure)
+    setCurrentBeat(cursor.beat)
+  }}
+  onSendToScore={(cursorEvents) => {
+    setNotes(
+      cursorEvents.map((event) => ({
+        duration: event.duration,
+        accidental: null,
+        isRest: false,
+        pitch: event.pitch,
+        measure: event.measure,
+        beat: event.beat,
+      })),
+    )
+
+    if (cursorEvents.length > 0) {
+      const lastEvent = cursorEvents[cursorEvents.length - 1]
+      setCurrentMeasure(lastEvent.measure)
+      setCurrentBeat(lastEvent.beat)
+    }
+
+    setBrainSummary(`Sent ${cursorEvents.length} cursor event(s) to score.`)
+  }}
+/>
         </section>
 
         <aside style={{ display: 'grid', gap: 12 }}>
