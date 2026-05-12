@@ -33,6 +33,11 @@ type NoteEvent = {
   endX?: number
 }
 
+type ScoreCursorPosition = {
+  measure: number
+  beat: number
+}
+
 function isDottedDuration(duration: DurationValue): boolean {
   return duration === 'DottedHalf' || duration === 'DottedQuarter' || duration === 'DottedEighth'
 }
@@ -140,10 +145,10 @@ function getSubdivisionCountForGrid(timeSignature: TimeSignatureValue): number {
 
 function drawPulseGridOverlay(
   context: any,
-y: number,
-timeSignature: TimeSignatureValue,
-measureIndex: number,
-measureFrame: MeasureFrame,
+  y: number,
+  timeSignature: TimeSignatureValue,
+  measureIndex: number,
+  measureFrame: MeasureFrame,
 ) {
   if (!context || typeof context.beginPath !== 'function') return
 
@@ -195,6 +200,31 @@ const gridWidth = measureFrame.rhythmWidth
     }
   }
 
+  context.restore()
+}
+
+function drawScoreCursor(
+  context: any,
+  y: number,
+  timeSignature: TimeSignatureValue,
+  measureIndex: number,
+  measureFrame: MeasureFrame,
+  cursorPosition?: ScoreCursorPosition,
+) {
+  if (!cursorPosition) return
+  if (cursorPosition.measure !== measureIndex + 1) return
+
+  const pulseCount = getPulseCountForGrid(timeSignature)
+  const beatRatio = Math.max(0, Math.min(1, (cursorPosition.beat - 1) / pulseCount))
+  const cursorX = measureFrame.rhythmStartX + beatRatio * measureFrame.rhythmWidth
+
+  context.save()
+  context.setStrokeStyle('#111827')
+  context.setLineWidth(2)
+  context.beginPath()
+  context.moveTo(cursorX, y + 4)
+  context.lineTo(cursorX, y + 94)
+  context.stroke()
   context.restore()
 }
 
@@ -403,13 +433,16 @@ export default function ScoreRenderer({
   keySignature,
   harmonyProgression = [],
   showHarmonyOverlay = false,
+  cursorPosition,
 }: {
   notes: NoteEvent[]
   timeSignature: TimeSignatureValue
   keySignature: KeySignatureValue
   harmonyProgression?: string[]
   showHarmonyOverlay?: boolean
+  cursorPosition?: ScoreCursorPosition
 }) {
+
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [zoom, setZoom] = useState(1)
 
@@ -468,6 +501,7 @@ export default function ScoreRenderer({
 
 drawPulseGridOverlay(context as any, y, timeSignature, measureIndex, measureFrame)
 stave.draw()
+drawScoreCursor(context as any, y, timeSignature, measureIndex, measureFrame, cursorPosition)
 
       if (showHarmonyOverlay && harmonyProgression.length > 0) {
         const harmonyLabel = harmonyProgression[measureIndex % harmonyProgression.length]
