@@ -1,5 +1,8 @@
+import { generatePromptIntentScore } from './PromptIntentComposer'
+import PromptIntentDebugPanel from './PromptIntentDebugPanel'
+import { parsePromptIntent } from './PromptIntentEngine'
 import PitchEngineDebugPanel from './PitchEngineDebugPanel'
-import CursorDebugPanel from './CursorDebugPanel'
+import ChordCursorDebugPanel from './ChordCursorDebugPanel'
 import RhythmTreeDebugPanel from './RhythmTreeDebugPanel'
 import React, { useState } from 'react'
 import ScoreRenderer from './ScoreRenderer'
@@ -294,20 +297,44 @@ export default function PromptScoreShell() {
   }
 
   function handlePromptGenerate() {
-    const result = generateMusicBrainResult(promptText, {
+  const shouldUseIntentComposer =
+    promptText.toLowerCase().includes('melody') ||
+    promptText.toLowerCase().includes('mozart') ||
+    promptText.toLowerCase().includes('style') ||
+    promptText.toLowerCase().includes('measure') ||
+    promptText.toLowerCase().includes('bar')
+
+  if (shouldUseIntentComposer) {
+    const result = generatePromptIntentScore(promptText, {
       duration: selectedDuration,
       accidental: selectedAccidental,
       timeSignature,
     })
 
-    setNotes(result.notes)
+    setNotes(result.notes as NoteEvent[])
     setTimeSignature(result.timeSignature)
-    setKeySignature(result.keySignature)
+    setKeySignature(result.keySignature as KeySignatureValue)
     setCurrentMeasure(1)
     setCurrentBeat(1)
     setPromptText('')
     setBrainSummary(result.summary)
+    return
   }
+
+  const result = generateMusicBrainResult(promptText, {
+    duration: selectedDuration,
+    accidental: selectedAccidental,
+    timeSignature,
+  })
+
+  setNotes(result.notes)
+  setTimeSignature(result.timeSignature)
+  setKeySignature(result.keySignature)
+  setCurrentMeasure(1)
+  setCurrentBeat(1)
+  setPromptText('')
+  setBrainSummary(result.summary)
+}
 
   function handleTimeSignatureChange(nextTimeSignature: TimeSignatureValue) {
     setTimeSignature(nextTimeSignature)
@@ -511,7 +538,7 @@ export default function PromptScoreShell() {
 />
     </div>
 
-<CursorDebugPanel
+<ChordCursorDebugPanel
   onCursorChange={(cursor) => {
     setCurrentMeasure(cursor.measure)
     setCurrentBeat(cursor.beat)
@@ -519,14 +546,15 @@ export default function PromptScoreShell() {
   onSendToScore={(cursorEvents) => {
     setNotes(
       cursorEvents.map((event) => ({
-        duration: event.duration,
-        accidental: event.accidental,
-        octave: event.octave,
-        isRest: false,
-        pitch: event.pitch,
-        measure: event.measure,
-        beat: event.beat,
-      })),
+  duration: event.duration,
+  accidental: event.accidental,
+  octave: event.octave,
+  chordPitches: event.chordPitches,
+  isRest: false,
+  pitch: event.pitch,
+  measure: event.measure,
+  beat: event.beat,
+}))
     )
 
     if (cursorEvents.length > 0) {
@@ -540,6 +568,7 @@ export default function PromptScoreShell() {
 />
 
 <PitchEngineDebugPanel />
+<PromptIntentDebugPanel />
 <RhythmTreeDebugPanel />
         </section>
 
