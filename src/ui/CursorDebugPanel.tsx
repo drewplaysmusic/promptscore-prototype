@@ -45,62 +45,84 @@ export default function CursorDebugPanel({
   const [selectedPitch, setSelectedPitch] = useState<CursorPitchValue>('C')
   const [selectedOctave, setSelectedOctave] = useState(4)
   const [selectedAccidental, setSelectedAccidental] = useState<CursorAccidentalValue>(null)
-  const [durations, setDurations] = useState<CursorDurationValue[]>([])
+  type CursorEntry = {
+    duration: CursorDurationValue
+    pitch: CursorPitchValue
+    octave: number
+    accidental: CursorAccidentalValue
+}
+
+const [cursorEntries, setCursorEntries] = useState<CursorEntry[]>([])
   const [liveSendEnabled, setLiveSendEnabled] = useState(false)
 
   const cursor = useMemo(() => createMusicCursor({ timeSignature }), [timeSignature])
-  const placed = useMemo(() => placeDurationsFromCursor(cursor, durations), [cursor, durations])
+  const placed = useMemo(
+  () => placeDurationsFromCursor(cursor, cursorEntries.map((entry) => entry.duration)),
+  [cursor, cursorEntries],
+)
   const activeCursor = placed.nextCursor
   const selectedTicks = getDurationTicks(selectedDuration, cursor.ticksPerQuarter)
 
-  function getPlaced(nextDurations = durations) {
-    return placeDurationsFromCursor(cursor, nextDurations)
-  }
+  function getPlaced(nextEntries = cursorEntries) {
+  return placeDurationsFromCursor(cursor, nextEntries.map((entry) => entry.duration))
+}
 
-  function getScoreEvents(nextDurations = durations): CursorScoreEvent[] {
-    return getPlaced(nextDurations).events.map((event) => ({
-      duration: event.duration,
-      pitch: selectedPitch,
-      octave: selectedOctave,
-      accidental: selectedAccidental,
-      measure: event.measure,
-      beat: event.beat,
-    }))
-  }
+function getScoreEvents(nextEntries = cursorEntries): CursorScoreEvent[] {
+  return getPlaced(nextEntries).events.map((event, index) => ({
+    duration: event.duration,
+    pitch: nextEntries[index]?.pitch ?? selectedPitch,
+    octave: nextEntries[index]?.octave ?? selectedOctave,
+    accidental: nextEntries[index]?.accidental ?? selectedAccidental,
+    measure: event.measure,
+    beat: event.beat,
+  }))
+}
 
-  function notifyCursorChange(nextDurations = durations) {
-    const nextCursor = getPlaced(nextDurations).nextCursor
-    onCursorChange?.({ measure: nextCursor.measure, beat: nextCursor.beat })
-  }
+function notifyCursorChange(nextEntries = cursorEntries) {
+  const nextCursor = getPlaced(nextEntries).nextCursor
+  onCursorChange?.({
+    measure: nextCursor.measure,
+    beat: nextCursor.beat,
+  })
+}
 
-  function sendToScore(nextDurations = durations) {
-    onSendToScore?.(getScoreEvents(nextDurations))
-    notifyCursorChange(nextDurations)
-  }
+function sendToScore(nextEntries = cursorEntries) {
+  onSendToScore?.(getScoreEvents(nextEntries))
+  notifyCursorChange(nextEntries)
+}
 
-  function addDuration(duration = selectedDuration) {
-    setDurations((current) => {
-      const nextDurations = [...current, duration]
-      notifyCursorChange(nextDurations)
-      if (liveSendEnabled) sendToScore(nextDurations)
-      return nextDurations
-    })
-  }
+function addDuration(duration = selectedDuration) {
+  setCursorEntries((current) => {
+    const nextEntries = [
+      ...current,
+      {
+        duration,
+        pitch: selectedPitch,
+        octave: selectedOctave,
+        accidental: selectedAccidental,
+      },
+    ]
 
-  function undoLast() {
-    setDurations((current) => {
-      const nextDurations = current.slice(0, -1)
-      notifyCursorChange(nextDurations)
-      if (liveSendEnabled) sendToScore(nextDurations)
-      return nextDurations
-    })
-  }
+    notifyCursorChange(nextEntries)
+    if (liveSendEnabled) sendToScore(nextEntries)
+    return nextEntries
+  })
+}
 
-  function clearAll() {
-    setDurations([])
-    onCursorChange?.({ measure: 1, beat: 1 })
-    if (liveSendEnabled) onSendToScore?.([])
-  }
+function undoLast() {
+  setCursorEntries((current) => {
+    const nextEntries = current.slice(0, -1)
+    notifyCursorChange(nextEntries)
+    if (liveSendEnabled) sendToScore(nextEntries)
+    return nextEntries
+  })
+}
+
+function clearAll() {
+  setCursorEntries([])
+  onCursorChange?.({ measure: 1, beat: 1 })
+  if (liveSendEnabled) onSendToScore?.([])
+}
 
   return (
     <div style={{ marginTop: 16, border: '1px solid #d4d4d8', borderRadius: 14, background: '#ffffff', overflow: 'hidden' }}>

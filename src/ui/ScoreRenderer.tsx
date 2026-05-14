@@ -26,6 +26,7 @@ type NoteEvent = {
   isRest: boolean
   pitch: PitchValue
   measure: number
+  octave?: number
   beat: number
   tupletGroupId?: string
   ratioLabel?: string
@@ -78,7 +79,7 @@ function getVexAccidental(accidental: AccidentalValue): string | null {
 }
 
 function getVexKey(note: NoteEvent): string {
-  return `${note.pitch.toLowerCase()}/4`
+  return `${note.pitch.toLowerCase()}/${note.octave ?? 4}`
 }
 
 function getVexKeySignature(keySignature: KeySignatureValue): string {

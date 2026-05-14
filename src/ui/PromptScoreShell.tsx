@@ -1,3 +1,4 @@
+import PitchEngineDebugPanel from './PitchEngineDebugPanel'
 import CursorDebugPanel from './CursorDebugPanel'
 import RhythmTreeDebugPanel from './RhythmTreeDebugPanel'
 import React, { useState } from 'react'
@@ -27,6 +28,7 @@ type NoteEvent = {
   pitch: PitchValue
   measure: number
   beat: number
+  octave?: number
 }
 
 type PaletteItem = {
@@ -507,9 +509,9 @@ export default function PromptScoreShell() {
   keySignature={keySignature}
   cursorPosition={{ measure: currentMeasure, beat: currentBeat }}
 />
-          </div>
-       <RhythmTreeDebugPanel />
-       <CursorDebugPanel
+    </div>
+
+<CursorDebugPanel
   onCursorChange={(cursor) => {
     setCurrentMeasure(cursor.measure)
     setCurrentBeat(cursor.beat)
@@ -518,7 +520,8 @@ export default function PromptScoreShell() {
     setNotes(
       cursorEvents.map((event) => ({
         duration: event.duration,
-        accidental: null,
+        accidental: event.accidental,
+        octave: event.octave,
         isRest: false,
         pitch: event.pitch,
         measure: event.measure,
@@ -535,6 +538,9 @@ export default function PromptScoreShell() {
     setBrainSummary(`Sent ${cursorEvents.length} cursor event(s) to score.`)
   }}
 />
+
+<PitchEngineDebugPanel />
+<RhythmTreeDebugPanel />
         </section>
 
         <aside style={{ display: 'grid', gap: 12 }}>
