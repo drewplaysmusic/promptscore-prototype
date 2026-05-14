@@ -1,9 +1,10 @@
 import { fillMeasuresWithPattern } from './MeasureFillEngine'
 import { parsePromptIntent } from './PromptIntentEngine'
-import type { AccidentalValue, DurationValue, KeySignatureValue, NoteEvent, TimeSignatureValue } from './musicBrain'
+import { getStylePlan, getStyleScaleDegree } from './StyleEngine'
+import type { AccidentalValue, KeySignatureValue, NoteEvent, TimeSignatureValue } from './musicBrain'
 
 type ComposerDefaults = {
-  duration: DurationValue
+  duration: NoteEvent['duration']
   accidental: AccidentalValue
   timeSignature: TimeSignatureValue
 }
@@ -96,19 +97,8 @@ function getScale(keyRoot: string, mode: 'major' | 'minor'): ScaleTone[] {
   return MAJOR_SCALES[keyRoot] ?? MAJOR_SCALES.C
 }
 
-function getRhythmPattern(density: string, style: string): DurationValue[] {
-  if (density === 'simple') return ['Quarter', 'Quarter', 'Half']
-  if (density === 'busy') return ['Eighth', 'Eighth', 'Quarter', 'Eighth', 'Eighth', 'Quarter']
-  if (style === 'mozart' || style === 'classical') return ['Quarter', 'Eighth', 'Eighth', 'Half']
-  if (style === 'folk' || style === 'country') return ['Quarter', 'Eighth', 'Eighth', 'Half']
-  return ['Quarter', 'Quarter', 'Half']
-}
-
-function getContour(style: string): number[] {
-  if (style === 'mozart' || style === 'classical') return [0, 1, 2, 4, 3, 2, 1, 0, 2, 4, 5, 4, 2, 1, 0]
-  if (style === 'folk' || style === 'country') return [0, 2, 1, 0, 3, 2, 1, 0, 4, 3, 2, 0]
-  if (style === 'jazz') return [0, 2, 4, 5, 3, 4, 6, 5, 3, 2, 0]
-  return [0, 1, 2, 4, 3, 2, 1, 0]
+function countPlannedEvents(measurePlans: ReturnType<typeof fillMeasuresWithPattern>): number {
+  return measurePlans.reduce((total, measure) => total + measure.length, 0)
 }
 
 export function generatePromptIntentScore(prompt: string, defaults: ComposerDefaults): ComposerResult {
@@ -116,17 +106,22 @@ export function generatePromptIntentScore(prompt: string, defaults: ComposerDefa
   const timeSignature = defaults.timeSignature || '4/4'
   const keySignature = getKeySignature(intent.keyRoot, intent.mode)
   const scale = getScale(intent.keyRoot, intent.mode)
-  const rhythmPattern = getRhythmPattern(intent.density, intent.style)
-  const contour = getContour(intent.style)
-  const measurePlans = fillMeasuresWithPattern(intent.measureCount, rhythmPattern, timeSignature)
+  const stylePlan = getStylePlan(intent.style, intent.density)
+  const measurePlans = fillMeasuresWithPattern(intent.measureCount, stylePlan.rhythmPattern, timeSignature)
+  const totalEvents = countPlannedEvents(measurePlans)
   const notes: NoteEvent[] = []
-  let contourIndex = 0
+  let eventIndex = 0
 
   measurePlans.forEach((measurePlan, measureIndex) => {
-    measurePlan.forEach((plannedEvent, eventIndex) => {
-      const isFinalNote = measureIndex === measurePlans.length - 1 && eventIndex === measurePlan.length - 1
-      const scaleIndex = isFinalNote ? 0 : contour[contourIndex % contour.length]
-      const tone = scale[scaleIndex % scale.length]
+    measurePlan.forEach((plannedEvent) => {
+      const scaleDegree = getStyleScaleDegree(
+        stylePlan,
+        eventIndex,
+        totalEvents,
+        measureIndex,
+        measurePlans.length,
+      )
+      const tone = scale[Math.max(0, scaleDegree) % scale.length]
 
       notes.push({
         duration: plannedEvent.duration,
@@ -138,7 +133,7 @@ export function generatePromptIntentScore(prompt: string, defaults: ComposerDefa
         beat: plannedEvent.beat,
       } as NoteEvent)
 
-      contourIndex += 1
+      eventIndex += 1
     })
   })
 
@@ -146,6 +141,6 @@ export function generatePromptIntentScore(prompt: string, defaults: ComposerDefa
     notes,
     timeSignature,
     keySignature,
-    summary: `${intent.summary} Generated ${notes.length} note events across ${intent.measureCount} exactly filled measures.`,
+    summary: `${intent.summary} StyleEngine: ${stylePlan.summary}. Generated ${notes.length} note events across ${intent.measureCount} exactly filled measures.`,
   }
 }
