@@ -1,3 +1,4 @@
+import { fillMeasuresWithPattern } from './MeasureFillEngine'
 import { parsePromptIntent } from './PromptIntentEngine'
 import type { AccidentalValue, DurationValue, KeySignatureValue, NoteEvent, TimeSignatureValue } from './musicBrain'
 
@@ -87,32 +88,12 @@ const MINOR_SCALES: Record<string, ScaleTone[]> = {
 }
 
 function getKeySignature(keyRoot: string, mode: 'major' | 'minor'): KeySignatureValue {
-  const candidate = `${keyRoot} ${mode}` as KeySignatureValue
-  return candidate
+  return `${keyRoot} ${mode}` as KeySignatureValue
 }
 
 function getScale(keyRoot: string, mode: 'major' | 'minor'): ScaleTone[] {
   if (mode === 'minor') return MINOR_SCALES[keyRoot] ?? MINOR_SCALES.A
   return MAJOR_SCALES[keyRoot] ?? MAJOR_SCALES.C
-}
-
-function getMeasureBeats(timeSignature: TimeSignatureValue): number {
-  if (timeSignature === '3/4') return 3
-  if (timeSignature === '2/4') return 2
-  if (timeSignature === '6/8') return 3
-  return 4
-}
-
-function getDurationBeats(duration: DurationValue): number {
-  if (duration === 'Whole') return 4
-  if (duration === 'DottedHalf') return 3
-  if (duration === 'Half') return 2
-  if (duration === 'DottedQuarter') return 1.5
-  if (duration === 'Quarter') return 1
-  if (duration === 'DottedEighth') return 0.75
-  if (duration === 'Eighth') return 0.5
-  if (duration === 'TripletEighth') return 1 / 3
-  return 0.25
 }
 
 function getRhythmPattern(density: string, style: string): DurationValue[] {
@@ -137,47 +118,34 @@ export function generatePromptIntentScore(prompt: string, defaults: ComposerDefa
   const scale = getScale(intent.keyRoot, intent.mode)
   const rhythmPattern = getRhythmPattern(intent.density, intent.style)
   const contour = getContour(intent.style)
+  const measurePlans = fillMeasuresWithPattern(intent.measureCount, rhythmPattern, timeSignature)
   const notes: NoteEvent[] = []
-  const measureBeats = getMeasureBeats(timeSignature)
   let contourIndex = 0
 
-  for (let measure = 1; measure <= intent.measureCount; measure += 1) {
-    let beat = 1
-    let rhythmIndex = 0
-
-    while (beat <= measureBeats + 0.001) {
-      let duration = rhythmPattern[rhythmIndex % rhythmPattern.length]
-      let durationBeats = getDurationBeats(duration)
-
-      if (beat + durationBeats > measureBeats + 1.001) {
-        duration = beat === measureBeats ? 'Quarter' : 'Eighth'
-        durationBeats = getDurationBeats(duration)
-      }
-
-      const isFinalNote = measure === intent.measureCount && beat + durationBeats >= measureBeats + 1
+  measurePlans.forEach((measurePlan, measureIndex) => {
+    measurePlan.forEach((plannedEvent, eventIndex) => {
+      const isFinalNote = measureIndex === measurePlans.length - 1 && eventIndex === measurePlan.length - 1
       const scaleIndex = isFinalNote ? 0 : contour[contourIndex % contour.length]
       const tone = scale[scaleIndex % scale.length]
 
       notes.push({
-        duration,
+        duration: plannedEvent.duration,
         accidental: tone.accidental,
         isRest: false,
         pitch: tone.pitch,
         octave: tone.octave,
-        measure,
-        beat,
+        measure: measureIndex + 1,
+        beat: plannedEvent.beat,
       } as NoteEvent)
 
-      beat += durationBeats
-      rhythmIndex += 1
       contourIndex += 1
-    }
-  }
+    })
+  })
 
   return {
     notes,
     timeSignature,
     keySignature,
-    summary: `${intent.summary} Generated ${notes.length} note events across ${intent.measureCount} measures.`,
+    summary: `${intent.summary} Generated ${notes.length} note events across ${intent.measureCount} exactly filled measures.`,
   }
 }
