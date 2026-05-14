@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Accidental as VFAccidental, Beam, Dot, Formatter, Renderer, Stave, StaveNote, Voice } from 'vexflow'
+import { Accidental as VFAccidental, Beam, Dot, Formatter, Renderer, Stave, StaveNote, Tuplet, Voice } from 'vexflow'
 import { createMeasureFrame, type MeasureFrame } from './measureFrame'
 
 type DurationValue = 'Whole' | 'DottedHalf' | 'Half' | 'DottedQuarter' | 'Quarter' | 'DottedEighth' | 'Eighth' | '16th' | 'TripletEighth'
@@ -213,18 +213,36 @@ function isBeamable(note: NoteEvent): boolean {
   return !note.isRest && (note.duration === 'Eighth' || note.duration === '16th' || note.duration === 'TripletEighth')
 }
 
-function getSimpleBeams(vexNotes: StaveNote[], notesForMeasure: NoteEvent[]): Beam[] {
+function getSmartBeamsAndTuplets(vexNotes: StaveNote[], notes: NoteEvent[]): { beams: Beam[]; tuplets: Tuplet[] } {
   const beams: Beam[] = []
-  let group: StaveNote[] = []
-  notesForMeasure.forEach((note, index) => {
-    if (isBeamable(note)) group.push(vexNotes[index])
-    else {
-      if (group.length >= 2) beams.push(new Beam(group))
-      group = []
+  const tuplets: Tuplet[] = []
+  const groups = new Map<string, StaveNote[]>()
+
+  notes.forEach((note, index) => {
+    const id = note.bracketGroupId || note.tupletGroupId || note.ratioLabel || ''
+    if (!id || note.isRest) return
+
+    const group = groups.get(id) ?? []
+    group.push(vexNotes[index])
+    groups.set(id, group)
+  })
+
+  groups.forEach((group, id) => {
+    if (group.length < 2) return
+    beams.push(new Beam(group))
+
+    const numberMatch = id.match(/\d+/)
+    const tupletNumber = numberMatch ? Number(numberMatch[0]) : group.length
+
+    if (tupletNumber >= 3) {
+      tuplets.push(new Tuplet(group, {
+        num_notes: tupletNumber,
+        notes_occupied: tupletNumber === 3 ? 2 : tupletNumber - 1,
+      } as any))
     }
   })
-  if (group.length >= 2) beams.push(new Beam(group))
-  return beams
+
+  return { beams, tuplets }
 }
 
 export default function ScoreRenderer({ notes, timeSignature, keySignature, harmonyProgression = [], showHarmonyOverlay = false, cursorPosition }: {
@@ -246,7 +264,7 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
 
     const measureGroups = groupNotesByMeasure(notes)
     const renderer = new Renderer(container, Renderer.Backends.SVG)
-    renderer.resize(1180, 760)
+    renderer.resize(1180, 1200)
     const context = renderer.getContext()
     const voiceConfig = getVoiceConfig(timeSignature)
 
@@ -294,10 +312,13 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
       const voice = new Voice(voiceConfig)
       voice.setStrict(false)
       voice.addTickables(vexNotes)
-      const beams = getSimpleBeams(vexNotes, measureWithPadding)
+      const grouped = getSmartBeamsAndTuplets(vexNotes, measureWithPadding)
+      const beams = grouped.beams
+      const tuplets = grouped.tuplets
       new Formatter().joinVoices([voice]).format([voice], staveWidth - 92)
       voice.draw(context, stave)
       beams.forEach((beam) => beam.setContext(context).draw())
+      tuplets.forEach((tuplet) => tuplet.setContext(context).draw())
       drawScoreCursor(context as any, y, timeSignature, measureIndex, measureFrame, cursorPosition)
     })
   }, [notes, timeSignature, keySignature, harmonyProgression, showHarmonyOverlay, cursorPosition])
@@ -313,7 +334,7 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
           <button type="button" onClick={() => setZoom(1)}>Fit</button>
         </div>
       </div>
-      <div style={{ minHeight: 500, maxHeight: 620, overflow: 'auto', padding: 0, background: 'linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%)' }}>
+      <div style={{ minHeight: 500, maxHeight: 900, overflow: 'auto', padding: 0, background: 'linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%)' }}>
         <div style={{ width: 1180, minHeight: 760, background: 'transparent', boxShadow: 'none', transform: `scale(${zoom})`, transformOrigin: 'top left', padding: '6px 8px 24px' }}>
           {notes.length === 0 ? <div style={{ color: '#71717a', textAlign: 'center', paddingTop: 120 }}>Add notes to render the score timeline.</div> : <div ref={containerRef} />}
         </div>
