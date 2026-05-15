@@ -1,10 +1,11 @@
+import { playScoreNotes } from './PlaybackEngine'
 import { generatePromptIntentScore } from './PromptIntentComposer'
 import PromptIntentDebugPanel from './PromptIntentDebugPanel'
 import { parsePromptIntent } from './PromptIntentEngine'
 import PitchEngineDebugPanel from './PitchEngineDebugPanel'
 import ChordCursorDebugPanel from './ChordCursorDebugPanel'
 import RhythmTreeDebugPanel from './RhythmTreeDebugPanel'
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import ScoreRenderer from './ScoreRenderer'
 import { generateMusicBrainResult } from './musicBrain'
 
@@ -242,7 +243,36 @@ export default function PromptScoreShell() {
   const [currentMeasure, setCurrentMeasure] = useState(1)
   const [promptText, setPromptText] = useState('')
   const [brainSummary, setBrainSummary] = useState('Music Brain ready.')
+  const playbackHandleRef = useRef<ReturnType<typeof playScoreNotes> | null>(null)
 
+function handlePlay() {
+  playbackHandleRef.current?.stop()
+
+  playbackHandleRef.current = playScoreNotes(notes as any, {
+    tempo: 92,
+    timeSignature,
+    onCursorChange: (cursor) => {
+      setCurrentMeasure(cursor.measure)
+      setCurrentBeat(cursor.beat)
+    },
+    onComplete: () => {
+      playbackHandleRef.current = null
+      setCurrentMeasure(1)
+      setCurrentBeat(1)
+      setBrainSummary('Playback complete.')
+    },
+  })
+
+  setBrainSummary('Playing score.')
+}
+
+function handleStop() {
+  playbackHandleRef.current?.stop()
+  playbackHandleRef.current = null
+  setCurrentMeasure(1)
+  setCurrentBeat(1)
+  setBrainSummary('Playback stopped.')
+}
   function handleComposePaletteClick(item: PaletteItem) {
     if (isPitchValue(item.label)) {
       setSelectedPitch(item.label)
@@ -625,22 +655,17 @@ export default function PromptScoreShell() {
         }}
       >
         <div style={{ display: 'flex', gap: 10 }}>
-          {['Play', 'Stop', 'Loop', 'Tempo 92', 'Metronome'].map((item) => (
-            <button
-              key={item}
-              type="button"
-              style={{
-                border: '1px solid #d4d4d8',
-                background: '#fafafa',
-                borderRadius: 10,
-                padding: '8px 12px',
-                fontSize: 14,
-                cursor: 'pointer',
-              }}
-            >
-              {item}
-            </button>
-          ))}
+          <button type="button" onClick={handlePlay} style={{ border: '1px solid #d4d4d8', background: '#fafafa', borderRadius: 10, padding: '8px 12px', fontSize: 14, cursor: 'pointer' }}>
+  Play
+</button>
+
+<button type="button" onClick={handleStop} style={{ border: '1px solid #d4d4d8', background: '#fafafa', borderRadius: 10, padding: '8px 12px', fontSize: 14, cursor: 'pointer' }}>
+  Stop
+</button>
+
+<button type="button" style={{ border: '1px solid #d4d4d8', background: '#fafafa', borderRadius: 10, padding: '8px 12px', fontSize: 14 }}>
+  Tempo 92
+</button>
         </div>
 
         <div style={{ color: '#71717a', fontSize: 13 }}>PromptScore workspace shell v1</div>
