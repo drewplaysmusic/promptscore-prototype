@@ -1,6 +1,8 @@
 import { fillMeasuresWithPattern } from './MeasureFillEngine'
 import { parsePromptIntent } from './PromptIntentEngine'
 import { getStylePlan, getStyleScaleDegree } from './StyleEngine'
+import { generateHarmonyPlan, type HarmonyPlan, type RomanNumeral } from './harmonyBrain'
+import { chooseChordAwareScaleDegree, getChordToneSet } from './HarmonyTheoryEngine'
 import type { AccidentalValue, KeySignatureValue, NoteEvent, TimeSignatureValue } from './musicBrain'
 
 type ComposerDefaults = {
@@ -13,6 +15,7 @@ type ComposerResult = {
   notes: NoteEvent[]
   timeSignature: TimeSignatureValue
   keySignature: KeySignatureValue
+  harmony: HarmonyPlan
   summary: string
 }
 
@@ -97,8 +100,18 @@ function getScale(keyRoot: string, mode: 'major' | 'minor'): ScaleTone[] {
   return MAJOR_SCALES[keyRoot] ?? MAJOR_SCALES.C
 }
 
+function getScaleModeLabel(mode: 'major' | 'minor'): string {
+  return mode === 'minor' ? 'natural minor' : 'major'
+}
+
 function countPlannedEvents(measurePlans: ReturnType<typeof fillMeasuresWithPattern>): number {
   return measurePlans.reduce((total, measure) => total + measure.length, 0)
+}
+
+function getHarmonyForMeasure(harmony: HarmonyPlan, measureIndex: number): RomanNumeral {
+  if (harmony.progression.length === 0) return 'I'
+  const numeral = harmony.progression[measureIndex % harmony.progression.length]
+  return numeral === 'none' ? 'I' : numeral
 }
 
 export function generatePromptIntentScore(prompt: string, defaults: ComposerDefaults): ComposerResult {
@@ -107,20 +120,26 @@ export function generatePromptIntentScore(prompt: string, defaults: ComposerDefa
   const keySignature = getKeySignature(intent.keyRoot, intent.mode)
   const scale = getScale(intent.keyRoot, intent.mode)
   const stylePlan = getStylePlan(intent.style, intent.density)
+  const harmony = generateHarmonyPlan(prompt, intent.style === 'mozart' ? 'classical' : intent.style, getScaleModeLabel(intent.mode))
   const measurePlans = fillMeasuresWithPattern(intent.measureCount, stylePlan.rhythmPattern, timeSignature)
   const totalEvents = countPlannedEvents(measurePlans)
   const notes: NoteEvent[] = []
   let eventIndex = 0
 
   measurePlans.forEach((measurePlan, measureIndex) => {
-    measurePlan.forEach((plannedEvent) => {
-      const scaleDegree = getStyleScaleDegree(
+    const romanNumeral = getHarmonyForMeasure(harmony, measureIndex)
+    const chordToneSet = getChordToneSet(intent.keyRoot, getScaleModeLabel(intent.mode), romanNumeral, 4)
+
+    measurePlan.forEach((plannedEvent, eventInMeasureIndex) => {
+      const contourDegree = getStyleScaleDegree(
         stylePlan,
         eventIndex,
         totalEvents,
         measureIndex,
         measurePlans.length,
       )
+      const isCadencePoint = eventInMeasureIndex === measurePlan.length - 1
+      const scaleDegree = chooseChordAwareScaleDegree(contourDegree, chordToneSet, eventIndex, isCadencePoint)
       const tone = scale[Math.max(0, scaleDegree) % scale.length]
 
       notes.push({
@@ -141,6 +160,7 @@ export function generatePromptIntentScore(prompt: string, defaults: ComposerDefa
     notes,
     timeSignature,
     keySignature,
-    summary: `${intent.summary} StyleEngine: ${stylePlan.summary}. Generated ${notes.length} note events across ${intent.measureCount} exactly filled measures.`,
+    harmony,
+    summary: `${intent.summary} Harmony: ${harmony.progression.join(' → ')}. StyleEngine: ${stylePlan.summary}. Generated ${notes.length} note events across ${intent.measureCount} exactly filled measures.`,
   }
 }
