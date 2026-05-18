@@ -104,6 +104,24 @@ function makeAutoBeamKey(note: NoteEvent): string {
   return `auto-${note.measure}-${beatBucket}`
 }
 
+function drawScoreCursor(context: any, x: number, y: number, staveWidth: number, cursorPosition: ScoreCursorPosition | undefined, measureIndex: number, timeSignature: TimeSignatureValue) {
+  if (!cursorPosition) return
+  if (cursorPosition.measure !== measureIndex + 1) return
+
+  const beatCount = timeSignature === '6/8' ? 3 : Number(timeSignature.split('/')[0] || 4)
+  const beatRatio = Math.max(0, Math.min(1, (cursorPosition.beat - 1) / beatCount))
+  const cursorX = x + 26 + beatRatio * Math.max(1, staveWidth - 64)
+
+  context.save()
+  context.setStrokeStyle('#ef4444')
+  context.setLineWidth(2)
+  context.beginPath()
+  context.moveTo(cursorX, y + 4)
+  context.lineTo(cursorX, y + 92)
+  context.stroke()
+  context.restore()
+}
+
 function getSmartBeamsAndTuplets(vexNotes: StaveNote[], notes: NoteEvent[]): { beams: Beam[]; tuplets: Tuplet[] } {
   const beams: Beam[] = []
   const tuplets: Tuplet[] = []
@@ -147,7 +165,7 @@ function getSmartBeamsAndTuplets(vexNotes: StaveNote[], notes: NoteEvent[]): { b
   return { beams, tuplets }
 }
 
-export default function ScoreRenderer({ notes, timeSignature, keySignature, harmonyProgression = [], showHarmonyOverlay = false }: {
+export default function ScoreRenderer({ notes, timeSignature, keySignature, harmonyProgression = [], showHarmonyOverlay = false, cursorPosition }: {
   notes: NoteEvent[]
   timeSignature: TimeSignatureValue
   keySignature: KeySignatureValue
@@ -221,8 +239,9 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
       voice.draw(context, stave)
       grouped.beams.forEach((beam) => beam.setContext(context).draw())
       grouped.tuplets.forEach((tuplet) => tuplet.setContext(context).draw())
+      drawScoreCursor(context as any, x, y, staveWidth, cursorPosition, measureIndex, timeSignature)
     })
-  }, [notes, timeSignature, keySignature])
+  }, [notes, timeSignature, keySignature, cursorPosition])
 
   return (
     <div style={{ marginTop: 16, width: '100%', border: '1px solid #d4d4d8', borderRadius: 14, background: '#f8fafc', overflow: 'hidden' }}>
