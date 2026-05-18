@@ -11,6 +11,12 @@ type PlaybackOptions = {
   onComplete?: () => void
 }
 
+type PlaybackPitch = {
+  pitch: NoteEvent['pitch']
+  accidental: AccidentalValue
+  octave?: number
+}
+
 const SEMITONE_BY_PITCH: Record<NoteEvent['pitch'], number> = {
   C: 0,
   D: 2,
@@ -27,9 +33,15 @@ function accidentalOffset(accidental: AccidentalValue): number {
   return 0
 }
 
-function getMidiNumber(note: NoteEvent): number {
-  const octave = (note as NoteEvent & { octave?: number }).octave ?? 4
-  return 12 * (octave + 1) + SEMITONE_BY_PITCH[note.pitch] + accidentalOffset(note.accidental)
+function getMidiNumber(pitchEvent: PlaybackPitch): number {
+  const octave = pitchEvent.octave ?? 4
+  return 12 * (octave + 1) + SEMITONE_BY_PITCH[pitchEvent.pitch] + accidentalOffset(pitchEvent.accidental)
+}
+
+function getPlayablePitches(note: NoteEvent): PlaybackPitch[] {
+  const chordPitches = (note as NoteEvent & { chordPitches?: PlaybackPitch[] }).chordPitches
+  if (chordPitches && chordPitches.length > 0) return chordPitches
+  return [{ pitch: note.pitch, accidental: note.accidental, octave: (note as NoteEvent & { octave?: number }).octave ?? 4 }]
 }
 
 function midiToFrequency(midi: number): number {
@@ -48,30 +60,46 @@ function getDurationBeats(duration: NoteEvent['duration']): number {
   return 0.25
 }
 
-function getStartBeatAbsolute(note: NoteEvent, timeSignature: TimeSignatureValue): number {
-  const measureBeats = timeSignature === '3/4' ? 3 : timeSignature === '2/4' ? 2 : 4
-  return (note.measure - 1) * measureBeats + (note.beat - 1)
+function getMeasureBeats(timeSignature: TimeSignatureValue): number {
+  if (timeSignature === '3/4') return 3
+  if (timeSignature === '2/4') return 2
+  if (timeSignature === '6/8') return 3
+  return 4
 }
 
-function createTone(context: AudioContext, frequency: number, startTime: number, durationSeconds: number) {
+function getStartBeatAbsolute(note: NoteEvent, timeSignature: TimeSignatureValue): number {
+  return (note.measure - 1) * getMeasureBeats(timeSignature) + (note.beat - 1)
+}
+
+function createTone(context: AudioContext, frequency: number, startTime: number, durationSeconds: number, gainPeak = 0.18) {
   const oscillator = context.createOscillator()
   const gain = context.createGain()
   oscillator.type = 'triangle'
   oscillator.frequency.setValueAtTime(frequency, startTime)
 
   const attack = 0.01
-  const release = Math.min(0.08, durationSeconds * 0.25)
+  const release = Math.min(0.1, durationSeconds * 0.3)
   const sustainEnd = Math.max(startTime + attack, startTime + durationSeconds - release)
 
   gain.gain.setValueAtTime(0.0001, startTime)
-  gain.gain.exponentialRampToValueAtTime(0.18, startTime + attack)
-  gain.gain.setValueAtTime(0.14, sustainEnd)
+  gain.gain.exponentialRampToValueAtTime(gainPeak, startTime + attack)
+  gain.gain.setValueAtTime(gainPeak * 0.76, sustainEnd)
   gain.gain.exponentialRampToValueAtTime(0.0001, startTime + durationSeconds)
 
   oscillator.connect(gain)
   gain.connect(context.destination)
   oscillator.start(startTime)
   oscillator.stop(startTime + durationSeconds + 0.02)
+}
+
+function playNoteOrChord(context: AudioContext, note: NoteEvent, startTime: number, durationSeconds: number) {
+  const pitches = getPlayablePitches(note)
+  const chordGain = pitches.length > 1 ? Math.max(0.045, 0.14 / Math.sqrt(pitches.length)) : 0.18
+
+  pitches.forEach((pitch, index) => {
+    const frequency = midiToFrequency(getMidiNumber(pitch))
+    createTone(context, frequency, startTime + index * 0.006, durationSeconds, chordGain)
+  })
 }
 
 export function playScoreNotes(notes: NoteEvent[], options: PlaybackOptions = {}): PlaybackHandle {
@@ -85,10 +113,10 @@ export function playScoreNotes(notes: NoteEvent[], options: PlaybackOptions = {}
 
   playableNotes.forEach((note) => {
     const startOffset = getStartBeatAbsolute(note, timeSignature) * secondsPerBeat
-    const durationSeconds = getDurationBeats(note.duration) * secondsPerBeat * 0.92
+    const durationSeconds = getDurationBeats(note.duration) * secondsPerBeat * 0.94
     const startTime = context.currentTime + 0.08 + startOffset
 
-    createTone(context, midiToFrequency(getMidiNumber(note)), startTime, durationSeconds)
+    playNoteOrChord(context, note, startTime, durationSeconds)
 
     const cursorTimer = window.setTimeout(() => {
       if (!stopped) options.onCursorChange?.({ measure: note.measure, beat: note.beat })
