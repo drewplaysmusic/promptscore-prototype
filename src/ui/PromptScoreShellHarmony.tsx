@@ -74,7 +74,23 @@ function isPitchValue(value: string): value is PitchValue {
 
 function shouldUseIntentComposer(prompt: string): boolean {
   const normalized = prompt.toLowerCase()
-  return normalized.includes('melody') || normalized.includes('mozart') || normalized.includes('style') || normalized.includes('measure') || normalized.includes('bar')
+  return (
+    normalized.includes('melody') ||
+    normalized.includes('mozart') ||
+    normalized.includes('style') ||
+    normalized.includes('measure') ||
+    normalized.includes('bar') ||
+    normalized.includes('jazz') ||
+    normalized.includes('sketch') ||
+    normalized.includes('chord') ||
+    normalized.includes('harmony') ||
+    normalized.includes('progression') ||
+    normalized.includes('accompaniment') ||
+    normalized.includes('piano') ||
+    normalized.includes('bass') ||
+    normalized.includes('arpeggio') ||
+    normalized.includes('underneath')
+  )
 }
 
 function placeEventAtCursor(event: Omit<NoteEvent, 'measure' | 'beat'>, cursor: { measure: number; beat: number }, timeSignature: TimeSignatureValue): { note: NoteEvent; nextMeasure: number; nextBeat: number } {
@@ -118,6 +134,9 @@ export default function PromptScoreShellHarmony() {
     playbackHandleRef.current = playScoreNotes(notes as any, {
       tempo: 92,
       timeSignature,
+      keySignature,
+      harmonyProgression,
+      accompanimentEnabled: harmonyProgression.length > 0,
       onCursorChange: (cursor) => { setCurrentMeasure(cursor.measure); setCurrentBeat(cursor.beat) },
       onComplete: () => { playbackHandleRef.current = null; setCurrentMeasure(1); setCurrentBeat(1); setBrainSummary('Playback complete.') },
     })
