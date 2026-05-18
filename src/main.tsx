@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import PromptScoreShell from './ui/PromptScoreShell'
+import PromptScoreShell from './ui/PromptScoreShellHarmony'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
