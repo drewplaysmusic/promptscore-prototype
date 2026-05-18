@@ -3,6 +3,7 @@ import { parsePromptIntent } from './PromptIntentEngine'
 import { getStylePlan, getStyleScaleDegree } from './StyleEngine'
 import { generateHarmonyPlan, type HarmonyPlan, type RomanNumeral } from './harmonyBrain'
 import { chooseChordAwareScaleDegree, getChordToneSet } from './HarmonyTheoryEngine'
+import { getRhythmIntent } from './RhythmIntentEngine'
 import type { AccidentalValue, KeySignatureValue, NoteEvent, TimeSignatureValue } from './musicBrain'
 
 type ComposerDefaults = {
@@ -120,8 +121,9 @@ export function generatePromptIntentScore(prompt: string, defaults: ComposerDefa
   const keySignature = getKeySignature(intent.keyRoot, intent.mode)
   const scale = getScale(intent.keyRoot, intent.mode)
   const stylePlan = getStylePlan(intent.style, intent.density)
+  const rhythmIntent = getRhythmIntent(prompt, stylePlan.rhythmPattern)
   const harmony = generateHarmonyPlan(prompt, intent.style === 'mozart' ? 'classical' : intent.style, getScaleModeLabel(intent.mode))
-  const measurePlans = fillMeasuresWithPattern(intent.measureCount, stylePlan.rhythmPattern, timeSignature)
+  const measurePlans = fillMeasuresWithPattern(intent.measureCount, rhythmIntent.rhythmPattern, timeSignature)
   const totalEvents = countPlannedEvents(measurePlans)
   const notes: NoteEvent[] = []
   let eventIndex = 0
@@ -150,6 +152,10 @@ export function generatePromptIntentScore(prompt: string, defaults: ComposerDefa
         octave: tone.octave,
         measure: measureIndex + 1,
         beat: plannedEvent.beat,
+        tupletGroupId: plannedEvent.duration === 'TripletEighth' ? `triplet-${measureIndex}-${Math.floor(eventInMeasureIndex / 3)}` : undefined,
+        ratioLabel: plannedEvent.duration === 'TripletEighth' ? '3:2' : undefined,
+        beamGroupId: ['Eighth', '16th', 'TripletEighth'].includes(plannedEvent.duration) ? `beam-${measureIndex}-${Math.floor(eventInMeasureIndex / 4)}` : undefined,
+        bracketGroupId: plannedEvent.duration === 'TripletEighth' ? `triplet-bracket-${measureIndex}-${Math.floor(eventInMeasureIndex / 3)}` : undefined,
       } as NoteEvent)
 
       eventIndex += 1
@@ -161,6 +167,6 @@ export function generatePromptIntentScore(prompt: string, defaults: ComposerDefa
     timeSignature,
     keySignature,
     harmony,
-    summary: `${intent.summary} Harmony: ${harmony.progression.join(' → ')}. StyleEngine: ${stylePlan.summary}. Generated ${notes.length} note events across ${intent.measureCount} exactly filled measures.`,
+    summary: `${intent.summary} Harmony: ${harmony.progression.join(' → ')}. StyleEngine: ${stylePlan.summary}. ${rhythmIntent.summary} Generated ${notes.length} note events across ${intent.measureCount} exactly filled measures.`,
   }
 }
