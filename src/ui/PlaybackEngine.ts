@@ -1,3 +1,4 @@
+import { parseChordProgressionInput } from './ChordInputEngine'
 import type { AccidentalValue, NoteEvent, TimeSignatureValue } from './musicBrain'
 
 type PlaybackHandle = {
@@ -7,6 +8,9 @@ type PlaybackHandle = {
 type PlaybackOptions = {
   tempo?: number
   timeSignature?: TimeSignatureValue
+  keySignature?: string
+  harmonyProgression?: string[]
+  accompanimentEnabled?: boolean
   onCursorChange?: (cursor: { measure: number; beat: number }) => void
   onComplete?: () => void
 }
@@ -71,14 +75,18 @@ function getStartBeatAbsolute(note: NoteEvent, timeSignature: TimeSignatureValue
   return (note.measure - 1) * getMeasureBeats(timeSignature) + (note.beat - 1)
 }
 
-function createTone(context: AudioContext, frequency: number, startTime: number, durationSeconds: number, gainPeak = 0.18) {
+function getMeasureCount(notes: NoteEvent[]): number {
+  return Math.max(0, ...notes.map((note) => note.measure || 0))
+}
+
+function createTone(context: AudioContext, frequency: number, startTime: number, durationSeconds: number, gainPeak = 0.18, wave: OscillatorType = 'triangle') {
   const oscillator = context.createOscillator()
   const gain = context.createGain()
-  oscillator.type = 'triangle'
+  oscillator.type = wave
   oscillator.frequency.setValueAtTime(frequency, startTime)
 
   const attack = 0.01
-  const release = Math.min(0.1, durationSeconds * 0.3)
+  const release = Math.min(0.12, durationSeconds * 0.3)
   const sustainEnd = Math.max(startTime + attack, startTime + durationSeconds - release)
 
   gain.gain.setValueAtTime(0.0001, startTime)
@@ -102,6 +110,37 @@ function playNoteOrChord(context: AudioContext, note: NoteEvent, startTime: numb
   })
 }
 
+function playSustainedAccompaniment(context: AudioContext, options: Required<Pick<PlaybackOptions, 'tempo' | 'timeSignature'>> & PlaybackOptions, measureCount: number) {
+  if (!options.accompanimentEnabled) return
+  if (!options.harmonyProgression || options.harmonyProgression.length === 0) return
+
+  const keySignature = options.keySignature ?? 'C major'
+  const secondsPerBeat = 60 / options.tempo
+  const measureBeats = getMeasureBeats(options.timeSignature)
+  const chordPlans = parseChordProgressionInput(options.harmonyProgression.join(' '), keySignature, 4)
+  if (chordPlans.length === 0) return
+
+  for (let measureIndex = 0; measureIndex < Math.max(1, measureCount); measureIndex += 1) {
+    const chord = chordPlans[measureIndex % chordPlans.length]
+    const startTime = context.currentTime + 0.08 + measureIndex * measureBeats * secondsPerBeat
+    const durationSeconds = measureBeats * secondsPerBeat * 0.96
+    const bassMidi = getMidiNumber({ pitch: chord.root.step as NoteEvent['pitch'], accidental: chord.root.accidental as AccidentalValue, octave: 2 })
+
+    createTone(context, midiToFrequency(bassMidi), startTime, durationSeconds, 0.055, 'sine')
+
+    chord.pitches.forEach((pitch, index) => {
+      createTone(
+        context,
+        midiToFrequency(getMidiNumber({ pitch: pitch.step as NoteEvent['pitch'], accidental: pitch.accidental as AccidentalValue, octave: 3 + Math.floor(index / 2) })),
+        startTime + 0.012 * index,
+        durationSeconds,
+        0.032,
+        'sine',
+      )
+    })
+  }
+}
+
 export function playScoreNotes(notes: NoteEvent[], options: PlaybackOptions = {}): PlaybackHandle {
   const playableNotes = notes.filter((note) => !note.isRest && note.measure > 0)
   const tempo = options.tempo ?? 92
@@ -110,6 +149,8 @@ export function playScoreNotes(notes: NoteEvent[], options: PlaybackOptions = {}
   const context = new AudioContext()
   const timers: number[] = []
   let stopped = false
+
+  playSustainedAccompaniment(context, { ...options, tempo, timeSignature }, getMeasureCount(playableNotes))
 
   playableNotes.forEach((note) => {
     const startOffset = getStartBeatAbsolute(note, timeSignature) * secondsPerBeat
