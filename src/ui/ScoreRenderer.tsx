@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Accidental as VFAccidental, Beam, Dot, Formatter, Renderer, Stave, StaveNote, Tuplet, Voice } from 'vexflow'
 import { createMeasureFrame, type MeasureFrame } from './measureFrame'
+import { buildHarmonyLabels } from './HarmonyLabelEngine'
 
 type DurationValue = 'Whole' | 'DottedHalf' | 'Half' | 'DottedQuarter' | 'Quarter' | 'DottedEighth' | 'Eighth' | '16th' | 'TripletEighth'
 type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
@@ -51,18 +52,6 @@ function getVexDuration(duration: DurationValue, isRest: boolean): string {
   return `16${suffix}`
 }
 
-function getDurationBeats(duration: DurationValue): number {
-  if (duration === 'Whole') return 4
-  if (duration === 'DottedHalf') return 3
-  if (duration === 'Half') return 2
-  if (duration === 'DottedQuarter') return 1.5
-  if (duration === 'Quarter') return 1
-  if (duration === 'DottedEighth') return 0.75
-  if (duration === 'Eighth') return 0.5
-  if (duration === 'TripletEighth') return 1 / 3
-  return 0.25
-}
-
 function getVexAccidental(accidental: AccidentalValue): string | null {
   if (accidental === 'Sharp') return '#'
   if (accidental === 'Flat') return 'b'
@@ -88,13 +77,6 @@ function getVexKeySignature(keySignature: KeySignatureValue): string {
     'D minor': 'Dm', 'G minor': 'Gm', 'C minor': 'Cm', 'F minor': 'Fm', 'Bb minor': 'Bbm', 'Eb minor': 'Ebm', 'Ab minor': 'Abm',
   }
   return keyMap[keySignature] || 'C'
-}
-
-function getMeasureBeats(timeSignature: TimeSignatureValue): number {
-  if (timeSignature === '3/4') return 3
-  if (timeSignature === '2/4') return 2
-  if (timeSignature === '6/8') return 3
-  return 4
 }
 
 function getVoiceConfig(timeSignature: TimeSignatureValue): { num_beats: number; beat_value: number } {
@@ -124,6 +106,7 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [zoom, setZoom] = useState(1)
+  const harmonyLabels = buildHarmonyLabels(harmonyProgression, keySignature)
 
   useEffect(() => {
     const container = containerRef.current
@@ -148,7 +131,7 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
       if (measureInSystem === 0) stave.addClef('treble')
 
       if (measureIndex === 0) {
-        stave.addKeySignature('C')
+        stave.addKeySignature(getVexKeySignature(keySignature))
         stave.addTimeSignature(timeSignature)
       }
 
@@ -199,11 +182,11 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
 
       <div style={{ minHeight: 500, maxHeight: 900, overflow: 'auto', padding: 0, background: 'linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%)' }}>
         <div style={{ width: 1180, minHeight: 760, background: 'transparent', boxShadow: 'none', transform: `scale(${zoom})`, transformOrigin: 'top left', padding: '6px 8px 24px' }}>
-          {showHarmonyOverlay && harmonyProgression.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 372px)', rowGap: 102, padding: '12px 36px 0', fontSize: 22, fontWeight: 800, color: '#111827', pointerEvents: 'none' }}>
-              {Array.from({ length: Math.max(1, ...notes.map((note) => note.measure), harmonyProgression.length) }).map((_, index) => (
+          {showHarmonyOverlay && harmonyLabels.length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 372px)', rowGap: 102, padding: '12px 36px 0', fontSize: 18, fontWeight: 800, color: '#111827', pointerEvents: 'none' }}>
+              {Array.from({ length: Math.max(1, ...notes.map((note) => note.measure), harmonyLabels.length) }).map((_, index) => (
                 <div key={`harmony-${index}`} style={{ paddingLeft: index % 3 === 0 ? 88 : 22 }}>
-                  {harmonyProgression[index % harmonyProgression.length]}
+                  {harmonyLabels[index % harmonyLabels.length]}
                 </div>
               ))}
             </div>
