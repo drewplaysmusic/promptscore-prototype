@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Accidental as VFAccidental, Beam, Dot, Formatter, Renderer, Stave, StaveNote, Tuplet, Voice } from 'vexflow'
-import { createMeasureFrame, type MeasureFrame } from './measureFrame'
 import { buildHarmonyLabels } from './HarmonyLabelEngine'
 
 type DurationValue = 'Whole' | 'DottedHalf' | 'Half' | 'DottedQuarter' | 'Quarter' | 'DottedEighth' | 'Eighth' | '16th' | 'TripletEighth'
@@ -96,6 +95,38 @@ function groupNotesByMeasure(notes: NoteEvent[]): NoteEvent[][] {
   return groups.filter(Boolean)
 }
 
+function getSmartBeamsAndTuplets(vexNotes: StaveNote[], notes: NoteEvent[]): { beams: Beam[]; tuplets: Tuplet[] } {
+  const beams: Beam[] = []
+  const tuplets: Tuplet[] = []
+  const groups = new Map<string, StaveNote[]>()
+
+  notes.forEach((note, index) => {
+    const id = note.bracketGroupId || note.tupletGroupId || note.ratioLabel || ''
+    if (!id || note.isRest) return
+
+    const group = groups.get(id) ?? []
+    group.push(vexNotes[index])
+    groups.set(id, group)
+  })
+
+  groups.forEach((group, id) => {
+    if (group.length < 2) return
+    beams.push(new Beam(group))
+
+    const numberMatch = id.match(/\d+/)
+    const tupletNumber = numberMatch ? Number(numberMatch[0]) : group.length
+
+    if (tupletNumber >= 3) {
+      tuplets.push(new Tuplet(group, {
+        num_notes: tupletNumber,
+        notes_occupied: tupletNumber === 3 ? 2 : tupletNumber - 1,
+      } as any))
+    }
+  })
+
+  return { beams, tuplets }
+}
+
 export default function ScoreRenderer({ notes, timeSignature, keySignature, harmonyProgression = [], showHarmonyOverlay = false }: {
   notes: NoteEvent[]
   timeSignature: TimeSignatureValue
@@ -144,9 +175,14 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
           duration: getVexDuration(note.duration, note.isRest),
         })
 
-        const accidental = getVexAccidental(note.accidental)
-        if (accidental && !note.isRest) {
-          vexNote.addModifier(new VFAccidental(accidental), 0)
+        if (!note.isRest && note.chordPitches && note.chordPitches.length > 0) {
+          note.chordPitches.forEach((pitch, index) => {
+            const accidental = getVexAccidental(pitch.accidental)
+            if (accidental) vexNote.addModifier(new VFAccidental(accidental), index)
+          })
+        } else {
+          const accidental = getVexAccidental(note.accidental)
+          if (accidental && !note.isRest) vexNote.addModifier(new VFAccidental(accidental), 0)
         }
 
         if (isDottedDuration(note.duration)) {
@@ -160,8 +196,11 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
       voice.setStrict(false)
       voice.addTickables(vexNotes)
 
+      const grouped = getSmartBeamsAndTuplets(vexNotes, measureNotes)
       new Formatter().joinVoices([voice]).format([voice], staveWidth - 92)
       voice.draw(context, stave)
+      grouped.beams.forEach((beam) => beam.setContext(context).draw())
+      grouped.tuplets.forEach((tuplet) => tuplet.setContext(context).draw())
     })
   }, [notes, timeSignature, keySignature])
 
