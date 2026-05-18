@@ -21,6 +21,8 @@ type ComposerResult = {
   summary: string
 }
 
+type AccompanimentPattern = 'held-pad' | 'block-chords' | 'bass-chords' | 'arpeggio'
+
 const SIMPLE_SCALE = ['C', 'D', 'E', 'F', 'G', 'A', 'B'] as const
 
 function wantsPrintedAccompaniment(prompt: string): boolean {
@@ -31,36 +33,100 @@ function wantsPrintedAccompaniment(prompt: string): boolean {
     normalized.includes('progression') ||
     normalized.includes('accompaniment') ||
     normalized.includes('underneath') ||
-    normalized.includes('piano')
+    normalized.includes('piano') ||
+    normalized.includes('arpeggio') ||
+    normalized.includes('bass')
   )
 }
 
-function createAccompanimentEvents(harmonyProgression: string[], keySignature: KeySignatureValue, measureCount: number): NoteEvent[] {
+function getAccompanimentPattern(prompt: string): AccompanimentPattern {
+  const normalized = prompt.toLowerCase()
+  if (normalized.includes('arpeggio') || normalized.includes('broken chord') || normalized.includes('broken chords')) return 'arpeggio'
+  if (normalized.includes('bass') || normalized.includes('left hand') || normalized.includes('root movement')) return 'bass-chords'
+  if (normalized.includes('block') || normalized.includes('blocked')) return 'block-chords'
+  return 'held-pad'
+}
+
+function getMeasureBeats(timeSignature: TimeSignatureValue): number {
+  if (timeSignature === '3/4') return 3
+  if (timeSignature === '2/4') return 2
+  if (timeSignature === '6/8') return 3
+  return 4
+}
+
+function makeChordPitches(chord: ReturnType<typeof parseChordProgressionInput>[number], octave = 3) {
+  return chord.pitches.map((pitch, pitchIndex) => ({
+    pitch: pitch.step as NoteEvent['pitch'],
+    accidental: pitch.accidental as AccidentalValue,
+    octave: pitchIndex === 0 ? octave : octave + Math.floor(pitchIndex / 2),
+  }))
+}
+
+function makeChordEvent(chord: ReturnType<typeof parseChordProgressionInput>[number], measure: number, beat: number, duration: NoteEvent['duration'], octave = 3): NoteEvent {
+  const root = chord.root
+  return {
+    duration,
+    accidental: root.accidental as AccidentalValue,
+    isRest: false,
+    pitch: root.step as NoteEvent['pitch'],
+    octave,
+    chordPitches: makeChordPitches(chord, octave),
+    measure,
+    beat,
+  } as NoteEvent
+}
+
+function makeSinglePitchEvent(chord: ReturnType<typeof parseChordProgressionInput>[number], pitchIndex: number, measure: number, beat: number, duration: NoteEvent['duration'], octave = 3): NoteEvent {
+  const pitch = chord.pitches[pitchIndex % chord.pitches.length] ?? chord.root
+  return {
+    duration,
+    accidental: pitch.accidental as AccidentalValue,
+    isRest: false,
+    pitch: pitch.step as NoteEvent['pitch'],
+    octave: pitchIndex === 0 ? octave : octave + Math.floor(pitchIndex / 2),
+    measure,
+    beat,
+  } as NoteEvent
+}
+
+function createAccompanimentEvents(harmonyProgression: string[], keySignature: KeySignatureValue, measureCount: number, timeSignature: TimeSignatureValue, prompt: string): NoteEvent[] {
   if (harmonyProgression.length === 0 || measureCount <= 0) return []
 
   const chordPlans = parseChordProgressionInput(harmonyProgression.join(' '), keySignature, 3)
   if (chordPlans.length === 0) return []
 
-  return Array.from({ length: measureCount }).map((_, measureIndex) => {
-    const chord = chordPlans[measureIndex % chordPlans.length]
-    const root = chord.root
-    const chordPitches = chord.pitches.map((pitch, pitchIndex) => ({
-      pitch: pitch.step as NoteEvent['pitch'],
-      accidental: pitch.accidental as AccidentalValue,
-      octave: pitchIndex === 0 ? 3 : 3 + Math.floor(pitchIndex / 2),
-    }))
+  const pattern = getAccompanimentPattern(prompt)
+  const measureBeats = getMeasureBeats(timeSignature)
+  const events: NoteEvent[] = []
 
-    return {
-      duration: 'Whole',
-      accidental: root.accidental as AccidentalValue,
-      isRest: false,
-      pitch: root.step as NoteEvent['pitch'],
-      octave: 3,
-      chordPitches,
-      measure: measureIndex + 1,
-      beat: 1,
-    } as NoteEvent
-  })
+  for (let measureIndex = 0; measureIndex < measureCount; measureIndex += 1) {
+    const chord = chordPlans[measureIndex % chordPlans.length]
+    const measure = measureIndex + 1
+
+    if (pattern === 'arpeggio') {
+      const beats = timeSignature === '6/8' ? [1, 1.5, 2, 2.5, 3, 3.5] : [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5].filter((beat) => beat < measureBeats + 1)
+      beats.forEach((beat, index) => {
+        events.push(makeSinglePitchEvent(chord, index, measure, beat, 'Eighth', 3))
+      })
+      continue
+    }
+
+    if (pattern === 'bass-chords') {
+      events.push(makeSinglePitchEvent(chord, 0, measure, 1, 'Half', 2))
+      if (measureBeats > 2) events.push(makeChordEvent(chord, measure, 3, 'Half', 3))
+      continue
+    }
+
+    if (pattern === 'block-chords') {
+      events.push(makeChordEvent(chord, measure, 1, 'Half', 3))
+      if (measureBeats > 2) events.push(makeChordEvent(chord, measure, 3, 'Half', 3))
+      continue
+    }
+
+    events.push(makeChordEvent(chord, measure, 1, 'Whole', 3))
+  }
+
+  return applyRhythmGrouping(events as any, timeSignature) as NoteEvent[]
 }
 
 export function generatePromptIntentScore(prompt: string, defaults: ComposerDefaults): ComposerResult {
@@ -92,8 +158,9 @@ export function generatePromptIntentScore(prompt: string, defaults: ComposerDefa
   })
 
   const melodyNotes = applyRhythmGrouping(rawMelodyNotes as any, timeSignature) as NoteEvent[]
+  const accompanimentPattern = getAccompanimentPattern(prompt)
   const accompanimentNotes = wantsPrintedAccompaniment(prompt)
-    ? createAccompanimentEvents(harmony.progression ?? [], keySignature, intent.measureCount)
+    ? createAccompanimentEvents(harmony.progression ?? [], keySignature, intent.measureCount, timeSignature, prompt)
     : []
 
   const notes = [...accompanimentNotes, ...melodyNotes].sort((a, b) => (a.measure - b.measure) || (a.beat - b.beat) || ((a as any).octave ?? 4) - ((b as any).octave ?? 4))
@@ -103,6 +170,6 @@ export function generatePromptIntentScore(prompt: string, defaults: ComposerDefa
     timeSignature,
     keySignature,
     harmony,
-    summary: `${intent.summary} ${rhythmIntent.summary} Harmony: ${(harmony.progression ?? []).join(' → ')}.${accompanimentNotes.length > 0 ? ` Added ${accompanimentNotes.length} printed accompaniment chord event(s).` : ''}`,
+    summary: `${intent.summary} ${rhythmIntent.summary} Harmony: ${(harmony.progression ?? []).join(' → ')}.${accompanimentNotes.length > 0 ? ` Added ${accompanimentNotes.length} ${accompanimentPattern} accompaniment event(s).` : ''}`,
   }
 }
