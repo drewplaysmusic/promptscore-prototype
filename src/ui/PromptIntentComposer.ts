@@ -150,7 +150,7 @@ function createAccompanimentEvents(harmonyProgression: string[], keySignature: K
     events.push(makeChordEvent(chord, measure, 1, 'Whole', ACCOMPANIMENT_CHORD_OCTAVE))
   }
 
-  return applyRhythmGrouping(events as any, timeSignature) as NoteEvent[]
+  return (applyRhythmGrouping(events as any, timeSignature) as GeneratedNoteEvent[]).map(tagAccompaniment) as NoteEvent[]
 }
 
 export function generatePromptIntentScore(prompt: string, defaults: ComposerDefaults): ComposerResult {
