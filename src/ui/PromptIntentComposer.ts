@@ -24,6 +24,8 @@ type ComposerResult = {
 type AccompanimentPattern = 'held-pad' | 'block-chords' | 'bass-chords' | 'arpeggio' | 'alberti'
 
 const SIMPLE_SCALE = ['C', 'D', 'E', 'F', 'G', 'A', 'B'] as const
+const BASS_CLEF_ROOT_OCTAVE = 3
+const ACCOMPANIMENT_CHORD_OCTAVE = 3
 
 function wantsPrintedAccompaniment(prompt: string): boolean {
   const normalized = prompt.toLowerCase()
@@ -57,7 +59,7 @@ function getMeasureBeats(timeSignature: TimeSignatureValue): number {
   return 4
 }
 
-function makeChordPitches(chord: ReturnType<typeof parseChordProgressionInput>[number], octave = 3) {
+function makeChordPitches(chord: ReturnType<typeof parseChordProgressionInput>[number], octave = ACCOMPANIMENT_CHORD_OCTAVE) {
   return chord.pitches.map((pitch, pitchIndex) => ({
     pitch: pitch.step as NoteEvent['pitch'],
     accidental: pitch.accidental as AccidentalValue,
@@ -65,7 +67,7 @@ function makeChordPitches(chord: ReturnType<typeof parseChordProgressionInput>[n
   }))
 }
 
-function makeChordEvent(chord: ReturnType<typeof parseChordProgressionInput>[number], measure: number, beat: number, duration: NoteEvent['duration'], octave = 3): NoteEvent {
+function makeChordEvent(chord: ReturnType<typeof parseChordProgressionInput>[number], measure: number, beat: number, duration: NoteEvent['duration'], octave = ACCOMPANIMENT_CHORD_OCTAVE): NoteEvent {
   const root = chord.root
   return {
     duration,
@@ -79,7 +81,7 @@ function makeChordEvent(chord: ReturnType<typeof parseChordProgressionInput>[num
   } as NoteEvent
 }
 
-function makeSinglePitchEvent(chord: ReturnType<typeof parseChordProgressionInput>[number], pitchIndex: number, measure: number, beat: number, duration: NoteEvent['duration'], octave = 3): NoteEvent {
+function makeSinglePitchEvent(chord: ReturnType<typeof parseChordProgressionInput>[number], pitchIndex: number, measure: number, beat: number, duration: NoteEvent['duration'], octave = ACCOMPANIMENT_CHORD_OCTAVE): NoteEvent {
   const pitch = chord.pitches[pitchIndex % chord.pitches.length] ?? chord.root
   return {
     duration,
@@ -95,7 +97,7 @@ function makeSinglePitchEvent(chord: ReturnType<typeof parseChordProgressionInpu
 function createAccompanimentEvents(harmonyProgression: string[], keySignature: KeySignatureValue, measureCount: number, timeSignature: TimeSignatureValue, prompt: string): NoteEvent[] {
   if (harmonyProgression.length === 0 || measureCount <= 0) return []
 
-  const chordPlans = parseChordProgressionInput(harmonyProgression.join(' '), keySignature, 3)
+  const chordPlans = parseChordProgressionInput(harmonyProgression.join(' '), keySignature, ACCOMPANIMENT_CHORD_OCTAVE)
   if (chordPlans.length === 0) return []
 
   const pattern = getAccompanimentPattern(prompt)
@@ -110,7 +112,7 @@ function createAccompanimentEvents(harmonyProgression: string[], keySignature: K
       const albertiOrder = [0, 2, 1, 2, 0, 2, 1, 2]
       const beats = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5].filter((beat) => beat < measureBeats + 1)
       beats.forEach((beat, index) => {
-        events.push(makeSinglePitchEvent(chord, albertiOrder[index % albertiOrder.length], measure, beat, 'Eighth', 3))
+        events.push(makeSinglePitchEvent(chord, albertiOrder[index % albertiOrder.length], measure, beat, 'Eighth', BASS_CLEF_ROOT_OCTAVE))
       })
       continue
     }
@@ -118,29 +120,29 @@ function createAccompanimentEvents(harmonyProgression: string[], keySignature: K
     if (pattern === 'arpeggio') {
       const beats = timeSignature === '6/8' ? [1, 1.5, 2, 2.5, 3, 3.5] : [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5].filter((beat) => beat < measureBeats + 1)
       beats.forEach((beat, index) => {
-        events.push(makeSinglePitchEvent(chord, index, measure, beat, 'Eighth', 3))
+        events.push(makeSinglePitchEvent(chord, index, measure, beat, 'Eighth', BASS_CLEF_ROOT_OCTAVE))
       })
       continue
     }
 
     if (pattern === 'bass-chords') {
-      events.push(makeSinglePitchEvent(chord, 0, measure, 1, 'Quarter', 2))
-      events.push(makeSinglePitchEvent(chord, 0, measure, 2, 'Quarter', 2))
-      if (measureBeats > 2) events.push(makeChordEvent(chord, measure, 3, 'Half', 3))
+      events.push(makeSinglePitchEvent(chord, 0, measure, 1, 'Quarter', BASS_CLEF_ROOT_OCTAVE))
+      events.push(makeSinglePitchEvent(chord, 0, measure, 2, 'Quarter', BASS_CLEF_ROOT_OCTAVE))
+      if (measureBeats > 2) events.push(makeChordEvent(chord, measure, 3, 'Half', ACCOMPANIMENT_CHORD_OCTAVE))
       continue
     }
 
     if (pattern === 'block-chords') {
-      events.push(makeChordEvent(chord, measure, 1, 'Quarter', 3))
-      events.push(makeChordEvent(chord, measure, 2, 'Quarter', 3))
+      events.push(makeChordEvent(chord, measure, 1, 'Quarter', ACCOMPANIMENT_CHORD_OCTAVE))
+      events.push(makeChordEvent(chord, measure, 2, 'Quarter', ACCOMPANIMENT_CHORD_OCTAVE))
       if (measureBeats > 2) {
-        events.push(makeChordEvent(chord, measure, 3, 'Quarter', 3))
-        events.push(makeChordEvent(chord, measure, 4, 'Quarter', 3))
+        events.push(makeChordEvent(chord, measure, 3, 'Quarter', ACCOMPANIMENT_CHORD_OCTAVE))
+        events.push(makeChordEvent(chord, measure, 4, 'Quarter', ACCOMPANIMENT_CHORD_OCTAVE))
       }
       continue
     }
 
-    events.push(makeChordEvent(chord, measure, 1, 'Whole', 3))
+    events.push(makeChordEvent(chord, measure, 1, 'Whole', ACCOMPANIMENT_CHORD_OCTAVE))
   }
 
   return applyRhythmGrouping(events as any, timeSignature) as NoteEvent[]
