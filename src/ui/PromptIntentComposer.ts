@@ -21,7 +21,7 @@ type ComposerResult = {
   summary: string
 }
 
-type AccompanimentPattern = 'held-pad' | 'block-chords' | 'bass-chords' | 'arpeggio'
+type AccompanimentPattern = 'held-pad' | 'block-chords' | 'bass-chords' | 'arpeggio' | 'alberti'
 
 const SIMPLE_SCALE = ['C', 'D', 'E', 'F', 'G', 'A', 'B'] as const
 
@@ -35,13 +35,16 @@ function wantsPrintedAccompaniment(prompt: string): boolean {
     normalized.includes('underneath') ||
     normalized.includes('piano') ||
     normalized.includes('arpeggio') ||
+    normalized.includes('broken') ||
+    normalized.includes('alberti') ||
     normalized.includes('bass')
   )
 }
 
 function getAccompanimentPattern(prompt: string): AccompanimentPattern {
   const normalized = prompt.toLowerCase()
-  if (normalized.includes('arpeggio') || normalized.includes('broken chord') || normalized.includes('broken chords')) return 'arpeggio'
+  if (normalized.includes('alberti')) return 'alberti'
+  if (normalized.includes('arpeggio') || normalized.includes('arpeggiated') || normalized.includes('broken chord') || normalized.includes('broken chords')) return 'arpeggio'
   if (normalized.includes('bass') || normalized.includes('left hand') || normalized.includes('root movement')) return 'bass-chords'
   if (normalized.includes('block') || normalized.includes('blocked')) return 'block-chords'
   return 'held-pad'
@@ -103,6 +106,15 @@ function createAccompanimentEvents(harmonyProgression: string[], keySignature: K
     const chord = chordPlans[measureIndex % chordPlans.length]
     const measure = measureIndex + 1
 
+    if (pattern === 'alberti') {
+      const albertiOrder = [0, 2, 1, 2, 0, 2, 1, 2]
+      const beats = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5].filter((beat) => beat < measureBeats + 1)
+      beats.forEach((beat, index) => {
+        events.push(makeSinglePitchEvent(chord, albertiOrder[index % albertiOrder.length], measure, beat, 'Eighth', 3))
+      })
+      continue
+    }
+
     if (pattern === 'arpeggio') {
       const beats = timeSignature === '6/8' ? [1, 1.5, 2, 2.5, 3, 3.5] : [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5].filter((beat) => beat < measureBeats + 1)
       beats.forEach((beat, index) => {
@@ -112,14 +124,19 @@ function createAccompanimentEvents(harmonyProgression: string[], keySignature: K
     }
 
     if (pattern === 'bass-chords') {
-      events.push(makeSinglePitchEvent(chord, 0, measure, 1, 'Half', 2))
+      events.push(makeSinglePitchEvent(chord, 0, measure, 1, 'Quarter', 2))
+      events.push(makeSinglePitchEvent(chord, 0, measure, 2, 'Quarter', 2))
       if (measureBeats > 2) events.push(makeChordEvent(chord, measure, 3, 'Half', 3))
       continue
     }
 
     if (pattern === 'block-chords') {
-      events.push(makeChordEvent(chord, measure, 1, 'Half', 3))
-      if (measureBeats > 2) events.push(makeChordEvent(chord, measure, 3, 'Half', 3))
+      events.push(makeChordEvent(chord, measure, 1, 'Quarter', 3))
+      events.push(makeChordEvent(chord, measure, 2, 'Quarter', 3))
+      if (measureBeats > 2) {
+        events.push(makeChordEvent(chord, measure, 3, 'Quarter', 3))
+        events.push(makeChordEvent(chord, measure, 4, 'Quarter', 3))
+      }
       continue
     }
 
