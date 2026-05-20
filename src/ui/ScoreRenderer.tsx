@@ -102,7 +102,7 @@ function inferLane(note: NoteEvent): VoiceLane {
   if (note.voiceType === 'accompaniment' || note.voiceType === 'bass') return 'accompaniment'
   const octave = note.octave ?? 4
   if (note.chordPitches && note.chordPitches.length > 1) return 'accompaniment'
-  if (octave <= 3) return 'accompaniment'
+  if (octave < 5) return 'accompaniment'
   return 'melody'
 }
 
