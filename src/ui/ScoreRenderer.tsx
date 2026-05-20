@@ -32,7 +32,6 @@ type NoteEvent = {
 }
 
 type VoiceLane = 'melody' | 'accompaniment'
-type RenderClef = 'treble' | 'bass'
 
 function isDottedDuration(duration: DurationValue): boolean {
   return duration === 'DottedHalf' || duration === 'DottedQuarter' || duration === 'DottedEighth'
@@ -193,12 +192,11 @@ function getStemDirection(lane: VoiceLane): number {
   return lane === 'melody' ? Stem.UP : Stem.DOWN
 }
 
-function createVexNotes(notes: NoteEvent[], lane: VoiceLane, clef: RenderClef): StaveNote[] {
+function createVexNotes(notes: NoteEvent[], lane: VoiceLane): StaveNote[] {
   const stemDirection = getStemDirection(lane)
 
   return notes.map((note) => {
     const vexNote = new StaveNote({
-      clef,
       keys: getVexKeys(note),
       duration: getVexDuration(note.duration, note.isRest),
       stem_direction: stemDirection,
@@ -223,11 +221,11 @@ function createVexNotes(notes: NoteEvent[], lane: VoiceLane, clef: RenderClef): 
   })
 }
 
-function drawVoiceLane(context: any, stave: Stave, notes: NoteEvent[], timeSignature: TimeSignatureValue, staveWidth: number, lane: VoiceLane, clef: RenderClef) {
+function drawVoiceLane(context: any, stave: Stave, notes: NoteEvent[], timeSignature: TimeSignatureValue, staveWidth: number, lane: VoiceLane) {
   if (notes.length === 0) return
 
   const voiceConfig = getVoiceConfig(timeSignature)
-  const vexNotes = createVexNotes(notes, lane, clef)
+  const vexNotes = createVexNotes(notes, lane)
   const voice = new Voice(voiceConfig)
   voice.setStrict(false)
   voice.addTickables(vexNotes)
@@ -284,7 +282,7 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
       topStave.setContext(context)
       topStave.draw()
       if (measureInSystem === 0 && accompanimentVisible) drawText(context, 'Melody up', x - 6, y + 28)
-      drawVoiceLane(context, topStave, accompanimentVisible ? melodyNotes : measureNotes, timeSignature, staveWidth, 'melody', 'treble')
+      drawVoiceLane(context, topStave, accompanimentVisible ? melodyNotes : measureNotes, timeSignature, staveWidth, 'melody')
 
       if (accompanimentVisible) {
         const lowerStave = new Stave(x, y + 82, staveWidth)
@@ -296,7 +294,7 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
         lowerStave.setContext(context)
         lowerStave.draw()
         if (measureInSystem === 0) drawText(context, 'Accomp. down', x - 6, y + 110)
-        drawVoiceLane(context, lowerStave, accompanimentNotes, timeSignature, staveWidth, 'accompaniment', 'bass')
+        drawVoiceLane(context, lowerStave, accompanimentNotes, timeSignature, staveWidth, 'accompaniment')
 
         if (measureInSystem === 0) {
           const brace = new StaveConnector(topStave, lowerStave)
