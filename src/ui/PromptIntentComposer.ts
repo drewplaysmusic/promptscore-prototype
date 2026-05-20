@@ -22,6 +22,7 @@ type ComposerResult = {
 }
 
 type AccompanimentPattern = 'held-pad' | 'block-chords' | 'bass-chords' | 'arpeggio' | 'alberti'
+type GeneratedNoteEvent = NoteEvent & { voiceType?: 'melody' | 'accompaniment' | 'bass' }
 
 const SIMPLE_SCALE = ['C', 'D', 'E', 'F', 'G', 'A', 'B'] as const
 const BASS_CLEF_ROOT_OCTAVE = 3
@@ -59,6 +60,10 @@ function getMeasureBeats(timeSignature: TimeSignatureValue): number {
   return 4
 }
 
+function tagAccompaniment(note: GeneratedNoteEvent): GeneratedNoteEvent {
+  return { ...note, voiceType: 'accompaniment' }
+}
+
 function makeChordPitches(chord: ReturnType<typeof parseChordProgressionInput>[number], octave = ACCOMPANIMENT_CHORD_OCTAVE) {
   return chord.pitches.map((pitch, pitchIndex) => ({
     pitch: pitch.step as NoteEvent['pitch'],
@@ -67,9 +72,9 @@ function makeChordPitches(chord: ReturnType<typeof parseChordProgressionInput>[n
   }))
 }
 
-function makeChordEvent(chord: ReturnType<typeof parseChordProgressionInput>[number], measure: number, beat: number, duration: NoteEvent['duration'], octave = ACCOMPANIMENT_CHORD_OCTAVE): NoteEvent {
+function makeChordEvent(chord: ReturnType<typeof parseChordProgressionInput>[number], measure: number, beat: number, duration: NoteEvent['duration'], octave = ACCOMPANIMENT_CHORD_OCTAVE): GeneratedNoteEvent {
   const root = chord.root
-  return {
+  return tagAccompaniment({
     duration,
     accidental: root.accidental as AccidentalValue,
     isRest: false,
@@ -78,12 +83,12 @@ function makeChordEvent(chord: ReturnType<typeof parseChordProgressionInput>[num
     chordPitches: makeChordPitches(chord, octave),
     measure,
     beat,
-  } as NoteEvent
+  } as GeneratedNoteEvent)
 }
 
-function makeSinglePitchEvent(chord: ReturnType<typeof parseChordProgressionInput>[number], pitchIndex: number, measure: number, beat: number, duration: NoteEvent['duration'], octave = ACCOMPANIMENT_CHORD_OCTAVE): NoteEvent {
+function makeSinglePitchEvent(chord: ReturnType<typeof parseChordProgressionInput>[number], pitchIndex: number, measure: number, beat: number, duration: NoteEvent['duration'], octave = ACCOMPANIMENT_CHORD_OCTAVE): GeneratedNoteEvent {
   const pitch = chord.pitches[pitchIndex % chord.pitches.length] ?? chord.root
-  return {
+  return tagAccompaniment({
     duration,
     accidental: pitch.accidental as AccidentalValue,
     isRest: false,
@@ -91,7 +96,7 @@ function makeSinglePitchEvent(chord: ReturnType<typeof parseChordProgressionInpu
     octave: pitchIndex === 0 ? octave : octave + Math.floor(pitchIndex / 2),
     measure,
     beat,
-  } as NoteEvent
+  } as GeneratedNoteEvent)
 }
 
 function createAccompanimentEvents(harmonyProgression: string[], keySignature: KeySignatureValue, measureCount: number, timeSignature: TimeSignatureValue, prompt: string): NoteEvent[] {
@@ -102,7 +107,7 @@ function createAccompanimentEvents(harmonyProgression: string[], keySignature: K
 
   const pattern = getAccompanimentPattern(prompt)
   const measureBeats = getMeasureBeats(timeSignature)
-  const events: NoteEvent[] = []
+  const events: GeneratedNoteEvent[] = []
 
   for (let measureIndex = 0; measureIndex < measureCount; measureIndex += 1) {
     const chord = chordPlans[measureIndex % chordPlans.length]
