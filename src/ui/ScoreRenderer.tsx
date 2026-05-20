@@ -117,6 +117,14 @@ function makeAutoBeamKey(note: NoteEvent): string {
   return `auto-${note.measure}-${beatBucket}`
 }
 
+function drawText(context: any, text: string, x: number, y: number) {
+  context.save()
+  context.setFont('Arial', 10, 'bold')
+  context.setFillStyle('#71717a')
+  context.fillText(text, x, y)
+  context.restore()
+}
+
 function drawScoreCursor(context: any, x: number, y: number, staveWidth: number, cursorPosition: ScoreCursorPosition | undefined, measureIndex: number, timeSignature: TimeSignatureValue, height = 92) {
   if (!cursorPosition) return
   if (cursorPosition.measure !== measureIndex + 1) return
@@ -178,12 +186,15 @@ function getSmartBeamsAndTuplets(vexNotes: StaveNote[], notes: NoteEvent[]): { b
   return { beams, tuplets }
 }
 
-function createVexNotes(notes: NoteEvent[]): StaveNote[] {
+function createVexNotes(notes: NoteEvent[], lane: VoiceLane): StaveNote[] {
+  const stemDirection = lane === 'melody' ? 1 : -1
+
   return notes.map((note) => {
     const vexNote = new StaveNote({
       keys: getVexKeys(note),
       duration: getVexDuration(note.duration, note.isRest),
-    })
+      stem_direction: stemDirection,
+    } as any)
 
     if (!note.isRest && note.chordPitches && note.chordPitches.length > 0) {
       note.chordPitches.forEach((pitch, index) => {
@@ -200,11 +211,11 @@ function createVexNotes(notes: NoteEvent[]): StaveNote[] {
   })
 }
 
-function drawVoiceLane(context: any, stave: Stave, notes: NoteEvent[], timeSignature: TimeSignatureValue, staveWidth: number) {
+function drawVoiceLane(context: any, stave: Stave, notes: NoteEvent[], timeSignature: TimeSignatureValue, staveWidth: number, lane: VoiceLane) {
   if (notes.length === 0) return
 
   const voiceConfig = getVoiceConfig(timeSignature)
-  const vexNotes = createVexNotes(notes)
+  const vexNotes = createVexNotes(notes, lane)
   const voice = new Voice(voiceConfig)
   voice.setStrict(false)
   voice.addTickables(vexNotes)
@@ -260,7 +271,8 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
 
       topStave.setContext(context)
       topStave.draw()
-      drawVoiceLane(context, topStave, accompanimentVisible ? melodyNotes : measureNotes, timeSignature, staveWidth)
+      if (measureInSystem === 0 && accompanimentVisible) drawText(context, 'Melody', x - 6, y + 28)
+      drawVoiceLane(context, topStave, accompanimentVisible ? melodyNotes : measureNotes, timeSignature, staveWidth, 'melody')
 
       if (accompanimentVisible) {
         const lowerStave = new Stave(x, y + 82, staveWidth)
@@ -271,7 +283,8 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
         }
         lowerStave.setContext(context)
         lowerStave.draw()
-        drawVoiceLane(context, lowerStave, accompanimentNotes, timeSignature, staveWidth)
+        if (measureInSystem === 0) drawText(context, 'Accomp.', x - 6, y + 110)
+        drawVoiceLane(context, lowerStave, accompanimentNotes, timeSignature, staveWidth, 'accompaniment')
 
         if (measureInSystem === 0) {
           const brace = new StaveConnector(topStave, lowerStave)
