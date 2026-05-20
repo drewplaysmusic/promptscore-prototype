@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Accidental as VFAccidental, Beam, Dot, Formatter, Renderer, Stave, StaveConnector, StaveNote, Tuplet, Voice } from 'vexflow'
+import { Accidental as VFAccidental, Beam, Dot, Formatter, Renderer, Stave, StaveConnector, StaveNote, Stem, Tuplet, Voice } from 'vexflow'
 import { buildHarmonyLabels } from './HarmonyLabelEngine'
 
 type DurationValue = 'Whole' | 'DottedHalf' | 'Half' | 'DottedQuarter' | 'Quarter' | 'DottedEighth' | 'Eighth' | '16th' | 'TripletEighth'
@@ -186,8 +186,12 @@ function getSmartBeamsAndTuplets(vexNotes: StaveNote[], notes: NoteEvent[]): { b
   return { beams, tuplets }
 }
 
+function getStemDirection(lane: VoiceLane): number {
+  return lane === 'melody' ? Stem.UP : Stem.DOWN
+}
+
 function createVexNotes(notes: NoteEvent[], lane: VoiceLane): StaveNote[] {
-  const stemDirection = lane === 'melody' ? 1 : -1
+  const stemDirection = getStemDirection(lane)
 
   return notes.map((note) => {
     const vexNote = new StaveNote({
@@ -195,6 +199,10 @@ function createVexNotes(notes: NoteEvent[], lane: VoiceLane): StaveNote[] {
       duration: getVexDuration(note.duration, note.isRest),
       stem_direction: stemDirection,
     } as any)
+
+    if (typeof (vexNote as any).setStemDirection === 'function') {
+      ;(vexNote as any).setStemDirection(stemDirection)
+    }
 
     if (!note.isRest && note.chordPitches && note.chordPitches.length > 0) {
       note.chordPitches.forEach((pitch, index) => {
@@ -271,7 +279,7 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
 
       topStave.setContext(context)
       topStave.draw()
-      if (measureInSystem === 0 && accompanimentVisible) drawText(context, 'Melody', x - 6, y + 28)
+      if (measureInSystem === 0 && accompanimentVisible) drawText(context, 'Melody ↑', x - 6, y + 28)
       drawVoiceLane(context, topStave, accompanimentVisible ? melodyNotes : measureNotes, timeSignature, staveWidth, 'melody')
 
       if (accompanimentVisible) {
@@ -283,7 +291,7 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
         }
         lowerStave.setContext(context)
         lowerStave.draw()
-        if (measureInSystem === 0) drawText(context, 'Accomp.', x - 6, y + 110)
+        if (measureInSystem === 0) drawText(context, 'Accomp. ↓', x - 6, y + 110)
         drawVoiceLane(context, lowerStave, accompanimentNotes, timeSignature, staveWidth, 'accompaniment')
 
         if (measureInSystem === 0) {
