@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react'
 import { playScoreNotes } from '../music/PlaybackEngine'
+import { downloadMidiFile } from '../music/MidiExportEngine'
 import { generatePromptIntentScore } from '../music/PromptIntentComposer'
 import PromptIntentDebugPanel from '../debug/PromptIntentDebugPanel'
 import PitchEngineDebugPanel from '../debug/PitchEngineDebugPanel'
@@ -189,6 +190,7 @@ export default function PromptScoreShellHarmony() {
     playbackHandleRef.current = playScoreNotes(playbackNotes as any, {
       tempo,
       timeSignature,
+      startMeasure: rangeStart,
       onCursorChange: (cursor) => { setCurrentMeasure(cursor.measure); setCurrentBeat(cursor.beat) },
       onComplete: () => {
         playbackHandleRef.current = null
@@ -220,6 +222,15 @@ export default function PromptScoreShellHarmony() {
     playbackHandleRef.current = null
     resetTransportCursor(loopEnabled ? loopRange.start : 1)
     setBrainSummary(loopEnabled ? `Transport rewound to loop start M${loopRange.start}.` : 'Transport rewound to measure 1.')
+  }
+
+  function handleExportMidi() {
+    if (notes.length === 0) {
+      setBrainSummary('Generate or enter notes before exporting MIDI.')
+      return
+    }
+    downloadMidiFile(notes as any, timeSignature, tempo, 'promptscore-export.mid')
+    setBrainSummary(`Exported MIDI at ${tempo} BPM.`)
   }
 
   function handleTempoChange(nextTempo: number) {
@@ -308,6 +319,7 @@ export default function PromptScoreShellHarmony() {
       <button type="button" onClick={handlePlay} disabled={notes.length === 0} style={{ border: '1px solid #111827', background: notes.length === 0 ? '#9ca3af' : '#111827', color: '#ffffff', borderRadius: 999, padding: '7px 12px', fontSize: 13, cursor: notes.length === 0 ? 'not-allowed' : 'pointer' }}>▶ Play</button>
       <button type="button" onClick={handleStop} style={{ border: '1px solid #d4d4d8', background: '#ffffff', borderRadius: 999, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}>■ Stop</button>
       <button type="button" onClick={() => setLoopEnabled((current) => !current)} style={{ border: loopEnabled ? '1px solid #111827' : '1px solid #d4d4d8', background: loopEnabled ? '#111827' : '#ffffff', color: loopEnabled ? '#ffffff' : '#111827', borderRadius: 999, padding: '7px 10px', fontSize: 13, cursor: 'pointer' }}>↺ Loop</button>
+      <button type="button" onClick={handleExportMidi} disabled={notes.length === 0} style={{ border: '1px solid #d4d4d8', background: notes.length === 0 ? '#f3f4f6' : '#ffffff', color: notes.length === 0 ? '#9ca3af' : '#111827', borderRadius: 999, padding: '7px 10px', fontSize: 13, cursor: notes.length === 0 ? 'not-allowed' : 'pointer' }}>Export MIDI</button>
       <span style={{ color: '#52525b', fontSize: 12 }}>M</span>
       <input type="number" min="1" max={measureCount} value={loopRange.start} onChange={(event) => handleLoopStartChange(Number(event.target.value))} style={{ width: 42, border: '1px solid #d4d4d8', borderRadius: 8, padding: '5px 4px', fontSize: 13, textAlign: 'center' }} />
       <span style={{ color: '#52525b', fontSize: 12 }}>–</span>
