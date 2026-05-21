@@ -2,7 +2,7 @@ import { fillMeasuresWithPattern } from './MeasureFillEngine'
 import { parsePromptIntent } from './PromptIntentEngine'
 import { getStylePlan, getStyleScaleDegree } from './StyleEngine'
 import { generateHarmonyPlan, type HarmonyPlan, type RomanNumeral } from './harmonyBrain'
-import { chooseChordAwareScaleDegree, getChordToneSet } from './HarmonyTheoryEngine'
+import { chooseChordAwareScaleDegree, getChordToneSet, type ChordToneSet } from './HarmonyTheoryEngine'
 import type { AccidentalValue, KeySignatureValue, NoteEvent, TimeSignatureValue } from './musicBrain'
 
 type ComposerDefaults = {
@@ -24,6 +24,17 @@ type ScaleTone = {
   accidental: AccidentalValue
   octave: number
 }
+
+type GeneratedNoteEvent = NoteEvent & {
+  voiceType?: 'melody' | 'accompaniment' | 'bass' | 'percussion'
+  chordPitches?: Array<{
+    pitch: NoteEvent['pitch']
+    accidental: AccidentalValue
+    octave: number
+  }>
+}
+
+type AccompanimentPattern = 'held-pad' | 'block-chords' | 'bass-chords' | 'arpeggio' | 'alberti'
 
 const MAJOR_SCALES: Record<string, ScaleTone[]> = {
   C: [
@@ -114,6 +125,121 @@ function getHarmonyForMeasure(harmony: HarmonyPlan, measureIndex: number): Roman
   return numeral === 'none' ? 'I' : numeral
 }
 
+function promptHasAny(prompt: string, words: string[]): boolean {
+  const normalized = prompt.toLowerCase()
+  return words.some((word) => normalized.includes(word))
+}
+
+function wantsPrintedAccompaniment(prompt: string): boolean {
+  return promptHasAny(prompt, [
+    'piano', 'chord', 'chords', 'harmony', 'progression', 'accompaniment', 'underneath',
+    'bass', 'alberti', 'arpeggio', 'arpeggiated', 'broken', 'left hand', 'two hands',
+  ])
+}
+
+function getAccompanimentPattern(prompt: string): AccompanimentPattern {
+  if (promptHasAny(prompt, ['alberti'])) return 'alberti'
+  if (promptHasAny(prompt, ['arpeggio', 'arpeggiated', 'broken'])) return 'arpeggio'
+  if (promptHasAny(prompt, ['bass movement', 'left hand', 'root movement'])) return 'bass-chords'
+  if (promptHasAny(prompt, ['block', 'blocked'])) return 'block-chords'
+  return 'held-pad'
+}
+
+function getMeasureBeats(timeSignature: TimeSignatureValue): number {
+  if (timeSignature === '3/4') return 3
+  if (timeSignature === '2/4') return 2
+  if (timeSignature === '6/8') return 3
+  return 4
+}
+
+function tagAccompaniment(note: GeneratedNoteEvent): GeneratedNoteEvent {
+  return { ...note, voiceType: 'accompaniment' }
+}
+
+function makeChordPitches(chordToneSet: ChordToneSet, octave = 3): GeneratedNoteEvent['chordPitches'] {
+  return chordToneSet.tones.map((tone, toneIndex) => ({
+    pitch: tone.pitch,
+    accidental: tone.accidental,
+    octave: octave + Math.floor(toneIndex / 2),
+  }))
+}
+
+function makeChordEvent(chordToneSet: ChordToneSet, measure: number, beat: number, duration: NoteEvent['duration'], octave = 3): GeneratedNoteEvent {
+  const root = chordToneSet.tones[0]
+  return tagAccompaniment({
+    duration,
+    accidental: root?.accidental ?? null,
+    isRest: false,
+    pitch: root?.pitch ?? 'C',
+    octave,
+    chordPitches: makeChordPitches(chordToneSet, octave),
+    measure,
+    beat,
+  } as GeneratedNoteEvent)
+}
+
+function makeSinglePitchEvent(chordToneSet: ChordToneSet, toneIndex: number, measure: number, beat: number, duration: NoteEvent['duration'], octave = 3): GeneratedNoteEvent {
+  const tone = chordToneSet.tones[toneIndex % chordToneSet.tones.length] ?? chordToneSet.tones[0]
+  return tagAccompaniment({
+    duration,
+    accidental: tone?.accidental ?? null,
+    isRest: false,
+    pitch: tone?.pitch ?? 'C',
+    octave: octave + Math.floor(toneIndex / 2),
+    measure,
+    beat,
+  } as GeneratedNoteEvent)
+}
+
+function createAccompanimentEvents(harmony: HarmonyPlan, keyRoot: string, mode: 'major' | 'minor', measureCount: number, timeSignature: TimeSignatureValue, prompt: string): GeneratedNoteEvent[] {
+  if (!wantsPrintedAccompaniment(prompt)) return []
+
+  const pattern = getAccompanimentPattern(prompt)
+  const measureBeats = getMeasureBeats(timeSignature)
+  const modeLabel = getScaleModeLabel(mode)
+  const events: GeneratedNoteEvent[] = []
+
+  for (let measureIndex = 0; measureIndex < measureCount; measureIndex += 1) {
+    const measure = measureIndex + 1
+    const romanNumeral = getHarmonyForMeasure(harmony, measureIndex)
+    const chordToneSet = getChordToneSet(keyRoot, modeLabel, romanNumeral, 3)
+
+    if (pattern === 'alberti') {
+      const order = [0, 2, 1, 2, 0, 2, 1, 2]
+      const beats = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5].filter((beat) => beat < measureBeats + 1)
+      beats.forEach((beat, index) => events.push(makeSinglePitchEvent(chordToneSet, order[index % order.length], measure, beat, 'Eighth', 3)))
+      continue
+    }
+
+    if (pattern === 'arpeggio') {
+      const beats = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5].filter((beat) => beat < measureBeats + 1)
+      beats.forEach((beat, index) => events.push(makeSinglePitchEvent(chordToneSet, index, measure, beat, 'Eighth', 3)))
+      continue
+    }
+
+    if (pattern === 'bass-chords') {
+      events.push(makeSinglePitchEvent(chordToneSet, 0, measure, 1, 'Quarter', 3))
+      events.push(makeSinglePitchEvent(chordToneSet, 0, measure, 2, 'Quarter', 3))
+      if (measureBeats > 2) events.push(makeChordEvent(chordToneSet, measure, 3, 'Half', 3))
+      continue
+    }
+
+    if (pattern === 'block-chords') {
+      events.push(makeChordEvent(chordToneSet, measure, 1, 'Quarter', 3))
+      events.push(makeChordEvent(chordToneSet, measure, 2, 'Quarter', 3))
+      if (measureBeats > 2) {
+        events.push(makeChordEvent(chordToneSet, measure, 3, 'Quarter', 3))
+        events.push(makeChordEvent(chordToneSet, measure, 4, 'Quarter', 3))
+      }
+      continue
+    }
+
+    events.push(makeChordEvent(chordToneSet, measure, 1, 'Whole', 3))
+  }
+
+  return events
+}
+
 export function generatePromptIntentScore(prompt: string, defaults: ComposerDefaults): ComposerResult {
   const intent = parsePromptIntent(prompt)
   const timeSignature = defaults.timeSignature || '4/4'
@@ -123,7 +249,7 @@ export function generatePromptIntentScore(prompt: string, defaults: ComposerDefa
   const harmony = generateHarmonyPlan(prompt, intent.style === 'mozart' ? 'classical' : intent.style, getScaleModeLabel(intent.mode))
   const measurePlans = fillMeasuresWithPattern(intent.measureCount, stylePlan.rhythmPattern, timeSignature)
   const totalEvents = countPlannedEvents(measurePlans)
-  const notes: NoteEvent[] = []
+  const melodyNotes: GeneratedNoteEvent[] = []
   let eventIndex = 0
 
   measurePlans.forEach((measurePlan, measureIndex) => {
@@ -142,25 +268,29 @@ export function generatePromptIntentScore(prompt: string, defaults: ComposerDefa
       const scaleDegree = chooseChordAwareScaleDegree(contourDegree, chordToneSet, eventIndex, isCadencePoint)
       const tone = scale[Math.max(0, scaleDegree) % scale.length]
 
-      notes.push({
+      melodyNotes.push({
         duration: plannedEvent.duration,
         accidental: tone.accidental,
         isRest: false,
         pitch: tone.pitch,
-        octave: tone.octave,
+        octave: Math.max(5, tone.octave),
         measure: measureIndex + 1,
         beat: plannedEvent.beat,
-      } as NoteEvent)
+        voiceType: 'melody',
+      } as GeneratedNoteEvent)
 
       eventIndex += 1
     })
   })
 
+  const accompanimentNotes = createAccompanimentEvents(harmony, intent.keyRoot, intent.mode, intent.measureCount, timeSignature, prompt)
+  const notes = [...accompanimentNotes, ...melodyNotes].sort((a, b) => (a.measure - b.measure) || (a.beat - b.beat) || ((a.octave ?? 4) - (b.octave ?? 4)))
+
   return {
-    notes,
+    notes: notes as NoteEvent[],
     timeSignature,
     keySignature,
     harmony,
-    summary: `${intent.summary} Harmony: ${harmony.progression.join(' → ')}. StyleEngine: ${stylePlan.summary}. Generated ${notes.length} note events across ${intent.measureCount} exactly filled measures.`,
+    summary: `${intent.summary} Harmony: ${harmony.progression.join(' → ')}. StyleEngine: ${stylePlan.summary}. Generated ${melodyNotes.length} melody event(s)${accompanimentNotes.length > 0 ? ` and ${accompanimentNotes.length} accompaniment event(s)` : ''} across ${intent.measureCount} exactly filled measures.`,
   }
 }
