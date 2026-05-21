@@ -1,3 +1,4 @@
+import { downloadMusicXmlFile } from './MusicXmlExportEngine'
 import type { AccidentalValue, NoteEvent, TimeSignatureValue } from './musicBrain'
 
 type ChordPitch = {
@@ -187,7 +188,7 @@ function createMidiBytes(notes: ExportableNoteEvent[], timeSignature: TimeSignat
   return new Uint8Array([...header, ...track])
 }
 
-export function downloadMidiFile(notes: NoteEvent[], timeSignature: TimeSignatureValue, tempo: number, fileName = 'promptscore-export.mid') {
+function triggerMidiDownload(notes: NoteEvent[], timeSignature: TimeSignatureValue, tempo: number, fileName = 'promptscore-export.mid') {
   const bytes = createMidiBytes(notes as ExportableNoteEvent[], timeSignature, tempo)
   const blob = new Blob([bytes], { type: 'audio/midi' })
   const url = URL.createObjectURL(blob)
@@ -198,4 +199,11 @@ export function downloadMidiFile(notes: NoteEvent[], timeSignature: TimeSignatur
   anchor.click()
   anchor.remove()
   URL.revokeObjectURL(url)
+}
+
+export function downloadMidiFile(notes: NoteEvent[], timeSignature: TimeSignatureValue, tempo: number, fileName = 'promptscore-export.mid') {
+  triggerMidiDownload(notes, timeSignature, tempo, fileName)
+  window.setTimeout(() => {
+    downloadMusicXmlFile(notes, timeSignature, 'promptscore-export.musicxml')
+  }, 120)
 }
