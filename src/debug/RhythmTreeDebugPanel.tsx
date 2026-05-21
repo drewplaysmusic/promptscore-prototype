@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
-import { describeRhythmTree, flattenRhythmTree } from './RhythmTree'
-import { runRhythmFunnel } from './RhythmFunnel'
-import ScoreRenderer from './ScoreRenderer'
+import { describeRhythmTree, flattenRhythmTree } from '../music/RhythmTree'
+import { runRhythmFunnel } from '../music/RhythmFunnel'
+import ScoreRenderer from '../ui/ScoreRenderer'
 
 function formatRatio(value: number): string {
   return value.toFixed(4).replace(/0+$/, '').replace(/\.$/, '')

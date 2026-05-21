@@ -6,7 +6,7 @@ import {
   placeDurationsFromCursor,
   type CursorDurationValue,
   type CursorTimeSignatureValue,
-} from './MusicCursor'
+} from '../music/MusicCursor'
 
 type CursorPitchValue = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B'
 type CursorAccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null

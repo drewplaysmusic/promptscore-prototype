@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { parsePromptIntent } from './PromptIntentEngine'
+import { parsePromptIntent } from '../music/PromptIntentEngine'
 
 export default function PromptIntentDebugPanel() {
   const [prompt, setPrompt] = useState('16 measures melody in G major in the style of Mozart for piano')

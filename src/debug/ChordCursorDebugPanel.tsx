@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react'
-import { createMusicCursor, describeCursor, getDurationTicks, placeDurationsFromCursor, type CursorDurationValue, type CursorTimeSignatureValue } from './MusicCursor'
-import { getChord, type ChordQuality, type PitchValue as EnginePitchValue } from './PitchEngine'
-import { parseChordProgressionInput } from './ChordInputEngine'
+import { createMusicCursor, describeCursor, getDurationTicks, placeDurationsFromCursor, type CursorDurationValue, type CursorTimeSignatureValue } from '../music/MusicCursor'
+import { getChord, type ChordQuality, type PitchValue as EnginePitchValue } from '../music/PitchEngine'
 
 type CursorPitchValue = 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B'
 type CursorAccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
@@ -31,15 +30,7 @@ function describePitch(pitch: CursorChordPitch): string {
   return `${pitch.pitch}${accidentalLabel(pitch.accidental)}${pitch.octave}`
 }
 
-function looksLikeRomanToken(token: string): boolean {
-  return /^(b?VII|vii°7|vii°|V7alt|Imaj7|iim7|ii7|IV7|Im7|V7|I|ii|iii|IV|V|vi|i|ii°|III|iv|v|VI|VII)$/.test(token.trim())
-}
-
-export default function ChordCursorDebugPanel({ onSendToScore, onCursorChange, onHarmonyChange }: {
-  onSendToScore?: (events: CursorScoreEvent[]) => void
-  onCursorChange?: (cursor: CursorPositionEvent) => void
-  onHarmonyChange?: (progression: string[]) => void
-}) {
+export default function ChordCursorDebugPanel({ onSendToScore, onCursorChange }: { onSendToScore?: (events: CursorScoreEvent[]) => void; onCursorChange?: (cursor: CursorPositionEvent) => void }) {
   const [timeSignature, setTimeSignature] = useState<CursorTimeSignatureValue>('4/4')
   const [selectedDuration, setSelectedDuration] = useState<CursorDurationValue>('Quarter')
   const [selectedPitch, setSelectedPitch] = useState<CursorPitchValue>('C')
@@ -49,8 +40,6 @@ export default function ChordCursorDebugPanel({ onSendToScore, onCursorChange, o
   const [selectedChordQuality, setSelectedChordQuality] = useState<ChordQuality>('major')
   const [cursorEntries, setCursorEntries] = useState<CursorEntry[]>([])
   const [liveSendEnabled, setLiveSendEnabled] = useState(false)
-  const [progressionText, setProgressionText] = useState('I IV V I')
-  const [progressionKey, setProgressionKey] = useState('C major')
 
   const cursor = useMemo(() => createMusicCursor({ timeSignature }), [timeSignature])
   const placed = useMemo(() => placeDurationsFromCursor(cursor, cursorEntries.map((entry) => entry.duration)), [cursor, cursorEntries])
@@ -61,8 +50,6 @@ export default function ChordCursorDebugPanel({ onSendToScore, onCursorChange, o
     if (!chordModeEnabled) return undefined
     return getChord({ step: selectedPitch, octave: selectedOctave, accidental: selectedAccidental }, selectedChordQuality).pitches.map(toCursorPitch)
   }, [chordModeEnabled, selectedPitch, selectedOctave, selectedAccidental, selectedChordQuality])
-
-  const parsedProgression = useMemo(() => parseChordProgressionInput(progressionText, progressionKey, selectedOctave), [progressionText, progressionKey, selectedOctave])
 
   function getPlaced(nextEntries = cursorEntries) {
     return placeDurationsFromCursor(cursor, nextEntries.map((entry) => entry.duration))
@@ -99,29 +86,6 @@ export default function ChordCursorDebugPanel({ onSendToScore, onCursorChange, o
     })
   }
 
-  function addParsedProgression(sendImmediately = false) {
-    if (parsedProgression.length === 0) return
-
-    const nextEntries: CursorEntry[] = parsedProgression.map((chord) => ({
-      duration: selectedDuration,
-      pitch: chord.root.step as CursorPitchValue,
-      octave: chord.root.octave,
-      accidental: chord.root.accidental as CursorAccidentalValue,
-      chordPitches: chord.pitches.map(toCursorPitch),
-    }))
-
-    const romanProgression = progressionText
-      .replace(/[→>,-]/g, ' ')
-      .split(/\s+/)
-      .map((token) => token.trim())
-      .filter(looksLikeRomanToken)
-
-    setCursorEntries(nextEntries)
-    notifyCursorChange(nextEntries)
-    if (romanProgression.length > 0) onHarmonyChange?.(romanProgression)
-    if (sendImmediately || liveSendEnabled) sendToScore(nextEntries)
-  }
-
   function undoLast() {
     setCursorEntries((current) => {
       const nextEntries = current.slice(0, -1)
@@ -150,19 +114,6 @@ export default function ChordCursorDebugPanel({ onSendToScore, onCursorChange, o
           <button type="button" onClick={clearAll}>Clear</button>
           <button type="button" onClick={() => sendToScore()}>Send To Score</button>
           <button type="button" onClick={() => setLiveSendEnabled((enabled) => { if (!enabled) sendToScore(); return !enabled })}>Live Send: {liveSendEnabled ? 'On' : 'Off'}</button>
-        </div>
-      </div>
-
-      <div style={{ border: '1px solid #e4e4e7', borderRadius: 12, background: '#f8fafc', padding: 12, display: 'grid', gap: 8 }}>
-        <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: '#52525b' }}>Progression Input</div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <input value={progressionText} onChange={(event) => setProgressionText(event.target.value)} placeholder="I IV V I or C F G C" style={{ minWidth: 260, flex: 1, border: '1px solid #d4d4d8', borderRadius: 10, padding: '8px 10px' }} />
-          <select value={progressionKey} onChange={(event) => setProgressionKey(event.target.value)}><option value="C major">C major</option><option value="G major">G major</option><option value="D major">D major</option><option value="F major">F major</option><option value="A minor">A minor</option><option value="E minor">E minor</option><option value="D minor">D minor</option></select>
-          <button type="button" onClick={() => addParsedProgression(false)}>Load Progression</button>
-          <button type="button" onClick={() => addParsedProgression(true)}><strong>Send Progression</strong></button>
-        </div>
-        <div style={{ fontSize: 12, color: '#52525b' }}>
-          Parsed: {parsedProgression.length > 0 ? parsedProgression.map((chord) => `${chord.label}: ${chord.pitches.map(toCursorPitch).map(describePitch).join('·')}`).join(' | ') : 'No valid chords yet'}
         </div>
       </div>
 

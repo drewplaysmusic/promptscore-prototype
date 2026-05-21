@@ -15,7 +15,7 @@ import {
   type PitchStep,
   type PitchValue,
   type ScaleMode,
-} from './PitchEngine'
+} from '../music/PitchEngine'
 
 const STEPS: PitchStep[] = ['C', 'D', 'E', 'F', 'G', 'A', 'B']
 const OCTAVES = [2, 3, 4, 5, 6]
