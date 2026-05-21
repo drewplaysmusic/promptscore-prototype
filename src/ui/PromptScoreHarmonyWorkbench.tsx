@@ -25,6 +25,7 @@ type NoteEvent = {
   beat: number
   octave?: number
   chordPitches?: ChordPitch[]
+  voiceType?: 'melody' | 'accompaniment' | 'bass' | 'percussion'
 }
 
 type PaletteItem = { label: string; glyph?: string }
@@ -72,9 +73,42 @@ function isPitchValue(value: string): value is PitchValue {
   return ['C', 'D', 'E', 'F', 'G', 'A', 'B'].includes(value)
 }
 
-function shouldUseIntentComposer(prompt: string): boolean {
+function promptHasAny(prompt: string, words: string[]): boolean {
   const normalized = prompt.toLowerCase()
-  return normalized.includes('melody') || normalized.includes('mozart') || normalized.includes('style') || normalized.includes('measure') || normalized.includes('bar')
+  return words.some((word) => normalized.includes(word))
+}
+
+function shouldUseIntentComposer(prompt: string): boolean {
+  return promptHasAny(prompt, [
+    'melody', 'mozart', 'style', 'measure', 'bar', 'piano', 'chord', 'harmony', 'progression',
+    'accompaniment', 'bass', 'alberti', 'arpeggio', 'arpeggiated', 'broken', 'jazz', 'sketch', 'romantic',
+  ])
+}
+
+function shouldUseGrandStaff(prompt: string): boolean {
+  return promptHasAny(prompt, [
+    'piano', 'grand staff', 'two hands', 'left hand', 'right hand', 'chord', 'harmony', 'progression',
+    'accompaniment', 'bass', 'alberti', 'arpeggio', 'arpeggiated', 'broken', 'jazz', 'romantic',
+  ])
+}
+
+function normalizeGeneratedVoices(events: NoteEvent[]): NoteEvent[] {
+  return events.map((event) => {
+    const isAccompaniment =
+      event.voiceType === 'accompaniment' ||
+      event.voiceType === 'bass' ||
+      Boolean(event.chordPitches && event.chordPitches.length > 1) ||
+      ((event.octave ?? 4) < 5)
+
+    return {
+      ...event,
+      voiceType: isAccompaniment ? 'accompaniment' : 'melody',
+    }
+  })
+}
+
+function countVoice(events: NoteEvent[], voiceType: 'melody' | 'accompaniment'): number {
+  return events.filter((event) => event.voiceType === voiceType).length
 }
 
 function placeEventAtCursor(event: Omit<NoteEvent, 'measure' | 'beat'>, cursor: { measure: number; beat: number }, timeSignature: TimeSignatureValue): { note: NoteEvent; nextMeasure: number; nextBeat: number } {
@@ -149,37 +183,35 @@ export default function PromptScoreShellHarmony() {
   }
 
   function handleCanvasClick() {
-    const placed = placeEventAtCursor({ duration: selectedDuration, accidental: selectedAccidental, isRest: restMode, pitch: selectedPitch }, { measure: currentMeasure, beat: currentBeat }, timeSignature)
+    const placed = placeEventAtCursor({ duration: selectedDuration, accidental: selectedAccidental, isRest: restMode, pitch: selectedPitch, voiceType: 'melody' }, { measure: currentMeasure, beat: currentBeat }, timeSignature)
     setNotes((prev) => [...prev, placed.note])
     setHarmonyProgression([])
     setCurrentMeasure(placed.nextMeasure)
     setCurrentBeat(placed.nextBeat)
   }
 
-  function handlePromptGenerate() {
-    if (shouldUseIntentComposer(promptText)) {
-      const result = generatePromptIntentScore(promptText, { duration: selectedDuration, accidental: selectedAccidental, timeSignature })
-      setNotes(result.notes as NoteEvent[])
-      setTimeSignature(result.timeSignature)
-      setKeySignature(result.keySignature as KeySignatureValue)
-      setHarmonyProgression(result.harmony?.progression ?? [])
-      setCurrentMeasure(1)
-      setCurrentBeat(1)
-      setPromptText('')
-      setGrandStaffMode(promptText.toLowerCase().includes("piano") || promptText.toLowerCase().includes("grand staff") || promptText.toLowerCase().includes("two hands"))
-      setBrainSummary(result.summary)
-      return
-    }
-    const result = generateMusicBrainResult(promptText, { duration: selectedDuration, accidental: selectedAccidental, timeSignature })
-    setNotes(result.notes as NoteEvent[])
+  function applyGeneratedResult(result: any, sourcePrompt: string) {
+    const normalizedNotes = normalizeGeneratedVoices(result.notes as NoteEvent[])
+    setNotes(normalizedNotes)
     setTimeSignature(result.timeSignature)
     setKeySignature(result.keySignature as KeySignatureValue)
     setHarmonyProgression(result.harmony?.progression ?? [])
     setCurrentMeasure(1)
     setCurrentBeat(1)
     setPromptText('')
-    setGrandStaffMode(promptText.toLowerCase().includes("piano") || promptText.toLowerCase().includes("grand staff") || promptText.toLowerCase().includes("two hands"))
-    setBrainSummary(result.summary)
+    setGrandStaffMode(shouldUseGrandStaff(sourcePrompt) || countVoice(normalizedNotes, 'accompaniment') > 0)
+    setBrainSummary(`${result.summary} Voices: melody ${countVoice(normalizedNotes, 'melody')}, accompaniment ${countVoice(normalizedNotes, 'accompaniment')}.`)
+  }
+
+  function handlePromptGenerate() {
+    const sourcePrompt = promptText
+    if (shouldUseIntentComposer(sourcePrompt)) {
+      const result = generatePromptIntentScore(sourcePrompt, { duration: selectedDuration, accidental: selectedAccidental, timeSignature })
+      applyGeneratedResult(result, sourcePrompt)
+      return
+    }
+    const result = generateMusicBrainResult(sourcePrompt, { duration: selectedDuration, accidental: selectedAccidental, timeSignature })
+    applyGeneratedResult(result, sourcePrompt)
   }
 
   function handleTimeSignatureChange(nextTimeSignature: TimeSignatureValue) {
@@ -188,6 +220,7 @@ export default function PromptScoreShellHarmony() {
     setHarmonyProgression([])
     setCurrentMeasure(1)
     setCurrentBeat(1)
+    setGrandStaffMode(false)
     setBrainSummary(`Meter changed to ${nextTimeSignature}. Score cleared.`)
   }
 
@@ -204,16 +237,16 @@ export default function PromptScoreShellHarmony() {
         <section style={{ border: '1px solid #d4d4d8', borderRadius: 16, background: '#ffffff', padding: 18, display: 'grid', gridTemplateRows: 'auto auto 1fr', gap: 16, minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
             <div><div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#71717a' }}>Workspace</div><div style={{ fontSize: 24, fontWeight: 800 }}>{MODE_LABELS[mode]} Mode</div></div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input value={promptText} onChange={(event) => setPromptText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') handlePromptGenerate() }} placeholder="Try: 16 measures melody in G major in the style of Mozart" style={{ border: '1px solid #d4d4d8', borderRadius: 10, padding: '10px 12px', fontSize: 14, minWidth: 360 }} /><button type="button" onClick={handlePromptGenerate} style={{ border: '1px solid #111827', background: '#111827', color: '#ffffff', borderRadius: 10, padding: '10px 14px', fontSize: 14, cursor: 'pointer' }}>Generate</button></div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input value={promptText} onChange={(event) => setPromptText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') handlePromptGenerate() }} placeholder="Try: 8 measure mozart style piano piece with alberti bass accompaniment" style={{ border: '1px solid #d4d4d8', borderRadius: 10, padding: '10px 12px', fontSize: 14, minWidth: 360 }} /><button type="button" onClick={handlePromptGenerate} style={{ border: '1px solid #111827', background: '#111827', color: '#ffffff', borderRadius: 10, padding: '10px 14px', fontSize: 14, cursor: 'pointer' }}>Generate</button></div>
           </div>
 
-          {mode === 'compose' ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Duration: <strong>{selectedDuration}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Pitch: <strong>{selectedPitch}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Accidental: <strong>{selectedAccidental || 'None'}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: restMode ? '#111827' : '#fafafa', color: restMode ? '#ffffff' : '#111827', padding: '8px 12px', fontSize: 14 }}>Rest mode: <strong>{restMode ? 'On' : 'Off'}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Position: <strong>M{currentMeasure} B{currentBeat}</strong></div><label style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Meter: <select value={timeSignature} onChange={(event) => handleTimeSignatureChange(event.target.value as TimeSignatureValue)} style={{ border: 0, background: 'transparent', fontWeight: 700 }}>{TIME_SIGNATURES.map((meter) => <option key={meter} value={meter}>{meter}</option>)}</select></label></div> : null}
+          {mode === 'compose' ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Duration: <strong>{selectedDuration}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Pitch: <strong>{selectedPitch}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Accidental: <strong>{selectedAccidental || 'None'}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: restMode ? '#111827' : '#fafafa', color: restMode ? '#ffffff' : '#111827', padding: '8px 12px', fontSize: 14 }}>Rest mode: <strong>{restMode ? 'On' : 'Off'}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Position: <strong>M{currentMeasure} B{currentBeat}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: grandStaffMode ? '#111827' : '#fafafa', color: grandStaffMode ? '#ffffff' : '#111827', padding: '8px 12px', fontSize: 14 }}>Grand Staff: <strong>{grandStaffMode ? 'On' : 'Off'}</strong></div><label style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Meter: <select value={timeSignature} onChange={(event) => handleTimeSignatureChange(event.target.value as TimeSignatureValue)} style={{ border: 0, background: 'transparent', fontWeight: 700 }}>{TIME_SIGNATURES.map((meter) => <option key={meter} value={meter}>{meter}</option>)}</select></label></div> : null}
 
           <div onClick={mode === 'compose' ? handleCanvasClick : undefined} style={{ border: '1px dashed #cbd5e1', borderRadius: 14, background: '#ffffff', minHeight: 420, height: '100%', cursor: mode === 'compose' ? 'pointer' : 'default', minWidth: 0, overflow: 'hidden' }}>
             <ScoreRenderer notes={notes as any} timeSignature={timeSignature} keySignature={keySignature as any} harmonyProgression={harmonyProgression} showHarmonyOverlay={harmonyProgression.length > 0} showGrandStaff={grandStaffMode} cursorPosition={{ measure: currentMeasure, beat: currentBeat }} />
           </div>
 
-          <ChordCursorDebugPanel onCursorChange={(cursor) => { setCurrentMeasure(cursor.measure); setCurrentBeat(cursor.beat) }} onSendToScore={(cursorEvents) => { setNotes(cursorEvents.map((event) => ({ duration: event.duration, accidental: event.accidental, octave: event.octave, chordPitches: event.chordPitches, isRest: false, pitch: event.pitch, measure: event.measure, beat: event.beat }))); setHarmonyProgression([]); if (cursorEvents.length > 0) { const lastEvent = cursorEvents[cursorEvents.length - 1]; setCurrentMeasure(lastEvent.measure); setCurrentBeat(lastEvent.beat) } setBrainSummary(`Sent ${cursorEvents.length} cursor event(s) to score.`) }} />
+          <ChordCursorDebugPanel onCursorChange={(cursor) => { setCurrentMeasure(cursor.measure); setCurrentBeat(cursor.beat) }} onSendToScore={(cursorEvents) => { const nextNotes = normalizeGeneratedVoices(cursorEvents.map((event) => ({ duration: event.duration, accidental: event.accidental, octave: event.octave, chordPitches: event.chordPitches, isRest: false, pitch: event.pitch, measure: event.measure, beat: event.beat }))); setNotes(nextNotes); setHarmonyProgression([]); setGrandStaffMode(countVoice(nextNotes, 'accompaniment') > 0); if (cursorEvents.length > 0) { const lastEvent = cursorEvents[cursorEvents.length - 1]; setCurrentMeasure(lastEvent.measure); setCurrentBeat(lastEvent.beat) } setBrainSummary(`Sent ${cursorEvents.length} cursor event(s) to score. Voices: melody ${countVoice(nextNotes, 'melody')}, accompaniment ${countVoice(nextNotes, 'accompaniment')}.`) }} />
           <PitchEngineDebugPanel />
           <PromptIntentDebugPanel />
           <RhythmTreeDebugPanel />
@@ -221,7 +254,7 @@ export default function PromptScoreShellHarmony() {
 
         <aside style={{ display: 'grid', gap: 12 }}>
           <PanelCard title="Inspector">{INSPECTOR_BY_MODE[mode].map((item) => <div key={item} style={{ border: '1px solid #e4e4e7', borderRadius: 10, background: '#fafafa', padding: 10, fontSize: 14 }}>{item}</div>)}</PanelCard>
-          <PanelCard title="Quick Status"><div>Mode: {MODE_LABELS[mode]}</div><div>Document: Untitled Score</div><div>Meter: {timeSignature}</div><div>Key: {keySignature}</div><div>Harmony: {harmonyProgression.length > 0 ? harmonyProgression.join(' → ') : 'None'}</div>{mode === 'compose' ? <><div>Selected Duration: {selectedDuration}</div><div>Selected Pitch: {selectedPitch}</div><div>Selected Accidental: {selectedAccidental || 'None'}</div><div>Rest Mode: {restMode ? 'On' : 'Off'}</div><div>Current Measure: {currentMeasure}</div><div>Current Beat: {currentBeat}</div><div>Events: {notes.length}</div></> : null}</PanelCard>
+          <PanelCard title="Quick Status"><div>Mode: {MODE_LABELS[mode]}</div><div>Document: Untitled Score</div><div>Meter: {timeSignature}</div><div>Key: {keySignature}</div><div>Harmony: {harmonyProgression.length > 0 ? harmonyProgression.join(' → ') : 'None'}</div>{mode === 'compose' ? <><div>Selected Duration: {selectedDuration}</div><div>Selected Pitch: {selectedPitch}</div><div>Selected Accidental: {selectedAccidental || 'None'}</div><div>Rest Mode: {restMode ? 'On' : 'Off'}</div><div>Grand Staff: {grandStaffMode ? 'On' : 'Off'}</div><div>Melody Events: {countVoice(notes, 'melody')}</div><div>Accomp. Events: {countVoice(notes, 'accompaniment')}</div><div>Current Measure: {currentMeasure}</div><div>Current Beat: {currentBeat}</div><div>Events: {notes.length}</div></> : null}</PanelCard>
           <PanelCard title={mode === 'rhythm' ? 'Rhythm Result' : 'Brain Result'}><div style={{ fontSize: 14, lineHeight: 1.5 }}>{brainSummary}</div></PanelCard>
         </aside>
       </main>
