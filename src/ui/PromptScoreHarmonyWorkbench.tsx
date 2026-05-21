@@ -92,19 +92,23 @@ function shouldUseGrandStaff(prompt: string): boolean {
   ])
 }
 
-function normalizeGeneratedVoices(events: NoteEvent[]): NoteEvent[] {
-  return events.map((event) => {
-    const isAccompaniment =
-      event.voiceType === 'accompaniment' ||
-      event.voiceType === 'bass' ||
-      Boolean(event.chordPitches && event.chordPitches.length > 1) ||
-      ((event.octave ?? 4) < 5)
+function isExplicitAccompanimentEvent(event: NoteEvent): boolean {
+  if (event.voiceType === 'accompaniment' || event.voiceType === 'bass') return true
+  if (event.chordPitches && event.chordPitches.length > 1) return true
+  return false
+}
 
-    return {
-      ...event,
-      voiceType: isAccompaniment ? 'accompaniment' : 'melody',
-    }
-  })
+function normalizeGeneratedVoices(events: NoteEvent[]): NoteEvent[] {
+  const hasExplicitAccompaniment = events.some(isExplicitAccompanimentEvent)
+
+  return events.map((event) => ({
+    ...event,
+    voiceType: isExplicitAccompanimentEvent(event)
+      ? 'accompaniment'
+      : hasExplicitAccompaniment
+        ? 'melody'
+        : event.voiceType ?? 'melody',
+  }))
 }
 
 function countVoice(events: NoteEvent[], voiceType: 'melody' | 'accompaniment'): number {
