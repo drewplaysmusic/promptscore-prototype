@@ -100,7 +100,17 @@ function detectInstrument(normalized: string): PromptInstrument {
 
 function detectDensity(normalized: string): PromptDensity {
   if (normalized.includes('simple') || normalized.includes('easy') || normalized.includes('beginner')) return 'simple'
-  if (normalized.includes('busy') || normalized.includes('fast') || normalized.includes('virtuosic')) return 'busy'
+  if (
+    normalized.includes('busy') ||
+    normalized.includes('fast') ||
+    normalized.includes('virtuosic') ||
+    normalized.includes('16th') ||
+    normalized.includes('sixteenth') ||
+    normalized.includes('sixteenths') ||
+    normalized.includes('run') ||
+    normalized.includes('runs') ||
+    normalized.includes('subdivision')
+  ) return 'busy'
   return 'moderate'
 }
 
