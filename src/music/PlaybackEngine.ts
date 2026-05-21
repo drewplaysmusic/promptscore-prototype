@@ -7,6 +7,7 @@ type PlaybackHandle = {
 type PlaybackOptions = {
   tempo?: number
   timeSignature?: TimeSignatureValue
+  startMeasure?: number
   onCursorChange?: (cursor: { measure: number; beat: number }) => void
   onComplete?: () => void
 }
@@ -99,6 +100,11 @@ function getStartBeatAbsolute(note: NoteEvent, timeSignature: TimeSignatureValue
   return (note.measure - 1) * measureBeats + (note.beat - 1)
 }
 
+function getRangeStartBeat(startMeasure: number, timeSignature: TimeSignatureValue): number {
+  const measureBeats = getMeasureBeats(timeSignature)
+  return (Math.max(1, startMeasure) - 1) * measureBeats
+}
+
 function getVoiceMix(note: PlayableNoteEvent): VoiceMix {
   if (note.voiceType === 'accompaniment' || note.voiceType === 'bass') return ACCOMPANIMENT_MIX
   if (note.chordPitches && note.chordPitches.length > 1) return ACCOMPANIMENT_MIX
@@ -139,6 +145,7 @@ export function playScoreNotes(notes: NoteEvent[], options: PlaybackOptions = {}
   const tempo = options.tempo ?? 92
   const secondsPerBeat = 60 / tempo
   const timeSignature = options.timeSignature ?? '4/4'
+  const rangeStartBeat = getRangeStartBeat(options.startMeasure ?? 1, timeSignature)
   const context = new AudioContext()
   const masterGain = context.createGain()
   masterGain.gain.setValueAtTime(0.88, context.currentTime)
@@ -149,7 +156,8 @@ export function playScoreNotes(notes: NoteEvent[], options: PlaybackOptions = {}
 
   playableNotes.forEach((note) => {
     const mix = getVoiceMix(note)
-    const startOffset = getStartBeatAbsolute(note, timeSignature) * secondsPerBeat
+    const rawStartBeat = getStartBeatAbsolute(note, timeSignature)
+    const startOffset = Math.max(0, rawStartBeat - rangeStartBeat) * secondsPerBeat
     const durationSeconds = getDurationBeats(note.duration) * secondsPerBeat * mix.durationScale
     const startTime = context.currentTime + 0.08 + startOffset
     const playablePitches = getPlayablePitches(note)
@@ -167,7 +175,7 @@ export function playScoreNotes(notes: NoteEvent[], options: PlaybackOptions = {}
 
   const finalNote = playableNotes[playableNotes.length - 1]
   const finalOffset = finalNote
-    ? (getStartBeatAbsolute(finalNote, timeSignature) + getDurationBeats(finalNote.duration)) * secondsPerBeat
+    ? Math.max(0, (getStartBeatAbsolute(finalNote, timeSignature) - rangeStartBeat) + getDurationBeats(finalNote.duration)) * secondsPerBeat
     : 0
 
   timers.push(window.setTimeout(() => {
