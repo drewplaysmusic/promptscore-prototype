@@ -36,6 +36,8 @@ type GeneratedNoteEvent = NoteEvent & {
 
 type AccompanimentPattern = 'held-pad' | 'block-chords' | 'bass-chords' | 'arpeggio' | 'alberti'
 
+const ACCOMPANIMENT_OCTAVE = 4
+
 const MAJOR_SCALES: Record<string, ScaleTone[]> = {
   C: [
     { pitch: 'C', accidental: null, octave: 4 },
@@ -156,7 +158,7 @@ function tagAccompaniment(note: GeneratedNoteEvent): GeneratedNoteEvent {
   return { ...note, voiceType: 'accompaniment' }
 }
 
-function makeChordPitches(chordToneSet: ChordToneSet, octave = 3): GeneratedNoteEvent['chordPitches'] {
+function makeChordPitches(chordToneSet: ChordToneSet, octave = ACCOMPANIMENT_OCTAVE): GeneratedNoteEvent['chordPitches'] {
   return chordToneSet.tones.map((tone, toneIndex) => ({
     pitch: tone.pitch,
     accidental: tone.accidental,
@@ -164,7 +166,7 @@ function makeChordPitches(chordToneSet: ChordToneSet, octave = 3): GeneratedNote
   }))
 }
 
-function makeChordEvent(chordToneSet: ChordToneSet, measure: number, beat: number, duration: NoteEvent['duration'], octave = 3): GeneratedNoteEvent {
+function makeChordEvent(chordToneSet: ChordToneSet, measure: number, beat: number, duration: NoteEvent['duration'], octave = ACCOMPANIMENT_OCTAVE): GeneratedNoteEvent {
   const root = chordToneSet.tones[0]
   return tagAccompaniment({
     duration,
@@ -178,7 +180,7 @@ function makeChordEvent(chordToneSet: ChordToneSet, measure: number, beat: numbe
   } as GeneratedNoteEvent)
 }
 
-function makeSinglePitchEvent(chordToneSet: ChordToneSet, toneIndex: number, measure: number, beat: number, duration: NoteEvent['duration'], octave = 3): GeneratedNoteEvent {
+function makeSinglePitchEvent(chordToneSet: ChordToneSet, toneIndex: number, measure: number, beat: number, duration: NoteEvent['duration'], octave = ACCOMPANIMENT_OCTAVE): GeneratedNoteEvent {
   const tone = chordToneSet.tones[toneIndex % chordToneSet.tones.length] ?? chordToneSet.tones[0]
   return tagAccompaniment({
     duration,
@@ -202,39 +204,39 @@ function createAccompanimentEvents(harmony: HarmonyPlan, keyRoot: string, mode: 
   for (let measureIndex = 0; measureIndex < measureCount; measureIndex += 1) {
     const measure = measureIndex + 1
     const romanNumeral = getHarmonyForMeasure(harmony, measureIndex)
-    const chordToneSet = getChordToneSet(keyRoot, modeLabel, romanNumeral, 3)
+    const chordToneSet = getChordToneSet(keyRoot, modeLabel, romanNumeral, ACCOMPANIMENT_OCTAVE)
 
     if (pattern === 'alberti') {
       const order = [0, 2, 1, 2, 0, 2, 1, 2]
       const beats = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5].filter((beat) => beat < measureBeats + 1)
-      beats.forEach((beat, index) => events.push(makeSinglePitchEvent(chordToneSet, order[index % order.length], measure, beat, 'Eighth', 3)))
+      beats.forEach((beat, index) => events.push(makeSinglePitchEvent(chordToneSet, order[index % order.length], measure, beat, 'Eighth', ACCOMPANIMENT_OCTAVE)))
       continue
     }
 
     if (pattern === 'arpeggio') {
       const beats = [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5].filter((beat) => beat < measureBeats + 1)
-      beats.forEach((beat, index) => events.push(makeSinglePitchEvent(chordToneSet, index, measure, beat, 'Eighth', 3)))
+      beats.forEach((beat, index) => events.push(makeSinglePitchEvent(chordToneSet, index, measure, beat, 'Eighth', ACCOMPANIMENT_OCTAVE)))
       continue
     }
 
     if (pattern === 'bass-chords') {
-      events.push(makeSinglePitchEvent(chordToneSet, 0, measure, 1, 'Quarter', 3))
-      events.push(makeSinglePitchEvent(chordToneSet, 0, measure, 2, 'Quarter', 3))
-      if (measureBeats > 2) events.push(makeChordEvent(chordToneSet, measure, 3, 'Half', 3))
+      events.push(makeSinglePitchEvent(chordToneSet, 0, measure, 1, 'Quarter', ACCOMPANIMENT_OCTAVE))
+      events.push(makeSinglePitchEvent(chordToneSet, 0, measure, 2, 'Quarter', ACCOMPANIMENT_OCTAVE))
+      if (measureBeats > 2) events.push(makeChordEvent(chordToneSet, measure, 3, 'Half', ACCOMPANIMENT_OCTAVE))
       continue
     }
 
     if (pattern === 'block-chords') {
-      events.push(makeChordEvent(chordToneSet, measure, 1, 'Quarter', 3))
-      events.push(makeChordEvent(chordToneSet, measure, 2, 'Quarter', 3))
+      events.push(makeChordEvent(chordToneSet, measure, 1, 'Quarter', ACCOMPANIMENT_OCTAVE))
+      events.push(makeChordEvent(chordToneSet, measure, 2, 'Quarter', ACCOMPANIMENT_OCTAVE))
       if (measureBeats > 2) {
-        events.push(makeChordEvent(chordToneSet, measure, 3, 'Quarter', 3))
-        events.push(makeChordEvent(chordToneSet, measure, 4, 'Quarter', 3))
+        events.push(makeChordEvent(chordToneSet, measure, 3, 'Quarter', ACCOMPANIMENT_OCTAVE))
+        events.push(makeChordEvent(chordToneSet, measure, 4, 'Quarter', ACCOMPANIMENT_OCTAVE))
       }
       continue
     }
 
-    events.push(makeChordEvent(chordToneSet, measure, 1, 'Whole', 3))
+    events.push(makeChordEvent(chordToneSet, measure, 1, 'Whole', ACCOMPANIMENT_OCTAVE))
   }
 
   return events
