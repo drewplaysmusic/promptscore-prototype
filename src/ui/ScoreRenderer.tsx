@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Accidental as VFAccidental, Beam, Dot, Formatter, Renderer, Stave, StaveConnector, StaveNote, Stem, Tuplet, Voice } from 'vexflow'
-import { buildHarmonyLabels } from './HarmonyLabelEngine'
 
 type DurationValue = 'Whole' | 'DottedHalf' | 'Half' | 'DottedQuarter' | 'Quarter' | 'DottedEighth' | 'Eighth' | '16th' | 'TripletEighth'
 type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
@@ -247,7 +246,7 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [zoom, setZoom] = useState(1)
-  const harmonyLabels = buildHarmonyLabels(harmonyProgression, keySignature)
+  const harmonyLabels = harmonyProgression || []
   const accompanimentVisible = hasAccompaniment(notes)
 
   useEffect(() => {
