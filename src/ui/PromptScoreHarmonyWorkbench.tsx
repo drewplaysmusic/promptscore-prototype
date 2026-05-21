@@ -228,11 +228,19 @@ export default function PromptScoreShellHarmony() {
     setBrainSummary(`Meter changed to ${nextTimeSignature}. Score cleared.`)
   }
 
+  const playbackControls = (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', border: '1px solid #e4e4e7', background: '#f8fafc', borderRadius: 999, padding: '4px 6px' }}>
+      <button type="button" onClick={handlePlay} disabled={notes.length === 0} style={{ border: '1px solid #111827', background: notes.length === 0 ? '#9ca3af' : '#111827', color: '#ffffff', borderRadius: 999, padding: '7px 12px', fontSize: 13, cursor: notes.length === 0 ? 'not-allowed' : 'pointer' }}>▶ Play</button>
+      <button type="button" onClick={handleStop} style={{ border: '1px solid #d4d4d8', background: '#ffffff', borderRadius: 999, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}>■ Stop</button>
+      <span style={{ color: '#52525b', fontSize: 13, padding: '0 8px' }}>Tempo 92</span>
+    </div>
+  )
+
   return (
-    <div style={{ minHeight: '100vh', background: '#f4f4f5', color: '#111827', fontFamily: 'Inter, Arial, sans-serif', display: 'grid', gridTemplateRows: '64px 1fr 60px' }}>
+    <div style={{ minHeight: '100vh', background: '#f4f4f5', color: '#111827', fontFamily: 'Inter, Arial, sans-serif', display: 'grid', gridTemplateRows: '64px 1fr 36px' }}>
       <header style={{ borderBottom: '1px solid #e4e4e7', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}><div style={{ fontSize: 18, fontWeight: 800 }}>PromptScore</div><nav style={{ display: 'flex', gap: 10, color: '#52525b', fontSize: 14 }}><span>File</span><span>Edit</span><span>View</span><span>Export</span></nav></div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{(Object.keys(MODE_LABELS) as WorkspaceMode[]).map((workspace) => <button key={workspace} type="button" onClick={() => setMode(workspace)} style={{ border: workspace === mode ? '1px solid #111827' : '1px solid #d4d4d8', background: workspace === mode ? '#111827' : '#ffffff', color: workspace === mode ? '#ffffff' : '#111827', borderRadius: 999, padding: '8px 12px', fontSize: 14, cursor: 'pointer' }}>{MODE_LABELS[workspace]}</button>)}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>{playbackControls}{(Object.keys(MODE_LABELS) as WorkspaceMode[]).map((workspace) => <button key={workspace} type="button" onClick={() => setMode(workspace)} style={{ border: workspace === mode ? '1px solid #111827' : '1px solid #d4d4d8', background: workspace === mode ? '#111827' : '#ffffff', color: workspace === mode ? '#ffffff' : '#111827', borderRadius: 999, padding: '8px 12px', fontSize: 14, cursor: 'pointer' }}>{MODE_LABELS[workspace]}</button>)}</div>
       </header>
 
       <main style={{ display: 'grid', gridTemplateColumns: '260px minmax(0, 1fr) 300px', gap: 16, padding: 16 }}>
@@ -264,8 +272,8 @@ export default function PromptScoreShellHarmony() {
       </main>
 
       <footer style={{ borderTop: '1px solid #e4e4e7', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px' }}>
-        <div style={{ display: 'flex', gap: 10 }}><button type="button" onClick={handlePlay} style={{ border: '1px solid #d4d4d8', background: '#fafafa', borderRadius: 10, padding: '8px 12px', fontSize: 14, cursor: 'pointer' }}>Play</button><button type="button" onClick={handleStop} style={{ border: '1px solid #d4d4d8', background: '#fafafa', borderRadius: 10, padding: '8px 12px', fontSize: 14, cursor: 'pointer' }}>Stop</button><button type="button" style={{ border: '1px solid #d4d4d8', background: '#fafafa', borderRadius: 10, padding: '8px 12px', fontSize: 14 }}>Tempo 92</button></div>
         <div style={{ color: '#71717a', fontSize: 13 }}>PromptScore v1 · Organized</div>
+        <div style={{ color: '#71717a', fontSize: 13 }}>M{currentMeasure} · Beat {currentBeat}</div>
       </footer>
     </div>
   )
