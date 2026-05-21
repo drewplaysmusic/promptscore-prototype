@@ -236,18 +236,19 @@ function drawVoiceLane(context: any, stave: Stave, notes: NoteEvent[], timeSigna
   grouped.tuplets.forEach((tuplet) => tuplet.setContext(context).draw())
 }
 
-export default function ScoreRenderer({ notes, timeSignature, keySignature, harmonyProgression = [], showHarmonyOverlay = false, cursorPosition }: {
+export default function ScoreRenderer({ notes, timeSignature, keySignature, harmonyProgression = [], showHarmonyOverlay = false, showGrandStaff = false, cursorPosition }: {
   notes: NoteEvent[]
   timeSignature: TimeSignatureValue
   keySignature: KeySignatureValue
   harmonyProgression?: string[]
   showHarmonyOverlay?: boolean
+  showGrandStaff?: boolean
   cursorPosition?: ScoreCursorPosition
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [zoom, setZoom] = useState(1)
   const harmonyLabels = harmonyProgression || []
-  const accompanimentVisible = hasAccompaniment(notes)
+  const accompanimentVisible = showGrandStaff && hasAccompaniment(notes)
 
   useEffect(() => {
     const container = containerRef.current
