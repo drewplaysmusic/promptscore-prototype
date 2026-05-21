@@ -111,6 +111,7 @@ export default function PromptScoreShellHarmony() {
   const [currentMeasure, setCurrentMeasure] = useState(1)
   const [promptText, setPromptText] = useState('')
   const [brainSummary, setBrainSummary] = useState('Music Brain ready.')
+  const [grandStaffMode, setGrandStaffMode] = useState(false)
   const playbackHandleRef = useRef<ReturnType<typeof playScoreNotes> | null>(null)
 
   function handlePlay() {
@@ -165,6 +166,7 @@ export default function PromptScoreShellHarmony() {
       setCurrentMeasure(1)
       setCurrentBeat(1)
       setPromptText('')
+      setGrandStaffMode(promptText.toLowerCase().includes("piano") || promptText.toLowerCase().includes("grand staff") || promptText.toLowerCase().includes("two hands"))
       setBrainSummary(result.summary)
       return
     }
@@ -176,6 +178,7 @@ export default function PromptScoreShellHarmony() {
     setCurrentMeasure(1)
     setCurrentBeat(1)
     setPromptText('')
+    setGrandStaffMode(promptText.toLowerCase().includes("piano") || promptText.toLowerCase().includes("grand staff") || promptText.toLowerCase().includes("two hands"))
     setBrainSummary(result.summary)
   }
 
@@ -207,7 +210,7 @@ export default function PromptScoreShellHarmony() {
           {mode === 'compose' ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Duration: <strong>{selectedDuration}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Pitch: <strong>{selectedPitch}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Accidental: <strong>{selectedAccidental || 'None'}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: restMode ? '#111827' : '#fafafa', color: restMode ? '#ffffff' : '#111827', padding: '8px 12px', fontSize: 14 }}>Rest mode: <strong>{restMode ? 'On' : 'Off'}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Position: <strong>M{currentMeasure} B{currentBeat}</strong></div><label style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Meter: <select value={timeSignature} onChange={(event) => handleTimeSignatureChange(event.target.value as TimeSignatureValue)} style={{ border: 0, background: 'transparent', fontWeight: 700 }}>{TIME_SIGNATURES.map((meter) => <option key={meter} value={meter}>{meter}</option>)}</select></label></div> : null}
 
           <div onClick={mode === 'compose' ? handleCanvasClick : undefined} style={{ border: '1px dashed #cbd5e1', borderRadius: 14, background: '#ffffff', minHeight: 420, height: '100%', cursor: mode === 'compose' ? 'pointer' : 'default', minWidth: 0, overflow: 'hidden' }}>
-            <ScoreRenderer notes={notes as any} timeSignature={timeSignature} keySignature={keySignature as any} harmonyProgression={harmonyProgression} showHarmonyOverlay={harmonyProgression.length > 0} cursorPosition={{ measure: currentMeasure, beat: currentBeat }} />
+            <ScoreRenderer notes={notes as any} timeSignature={timeSignature} keySignature={keySignature as any} harmonyProgression={harmonyProgression} showHarmonyOverlay={harmonyProgression.length > 0} showGrandStaff={grandStaffMode} cursorPosition={{ measure: currentMeasure, beat: currentBeat }} />
           </div>
 
           <ChordCursorDebugPanel onCursorChange={(cursor) => { setCurrentMeasure(cursor.measure); setCurrentBeat(cursor.beat) }} onSendToScore={(cursorEvents) => { setNotes(cursorEvents.map((event) => ({ duration: event.duration, accidental: event.accidental, octave: event.octave, chordPitches: event.chordPitches, isRest: false, pitch: event.pitch, measure: event.measure, beat: event.beat }))); setHarmonyProgression([]); if (cursorEvents.length > 0) { const lastEvent = cursorEvents[cursorEvents.length - 1]; setCurrentMeasure(lastEvent.measure); setCurrentBeat(lastEvent.beat) } setBrainSummary(`Sent ${cursorEvents.length} cursor event(s) to score.`) }} />
