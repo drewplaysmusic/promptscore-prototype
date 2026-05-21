@@ -69,6 +69,10 @@ function getMeasureBeats(timeSignature: TimeSignatureValue): number {
   return 4
 }
 
+function clampTempo(value: number): number {
+  return Math.max(40, Math.min(220, Math.round(value)))
+}
+
 function isPitchValue(value: string): value is PitchValue {
   return ['C', 'D', 'E', 'F', 'G', 'A', 'B'].includes(value)
 }
@@ -150,25 +154,44 @@ export default function PromptScoreShellHarmony() {
   const [promptText, setPromptText] = useState('')
   const [brainSummary, setBrainSummary] = useState('Music Brain ready.')
   const [grandStaffMode, setGrandStaffMode] = useState(false)
+  const [tempo, setTempo] = useState(92)
   const playbackHandleRef = useRef<ReturnType<typeof playScoreNotes> | null>(null)
+
+  function resetTransportCursor() {
+    setCurrentMeasure(1)
+    setCurrentBeat(1)
+  }
 
   function handlePlay() {
     playbackHandleRef.current?.stop()
+    resetTransportCursor()
     playbackHandleRef.current = playScoreNotes(notes as any, {
-      tempo: 92,
+      tempo,
       timeSignature,
       onCursorChange: (cursor) => { setCurrentMeasure(cursor.measure); setCurrentBeat(cursor.beat) },
-      onComplete: () => { playbackHandleRef.current = null; setCurrentMeasure(1); setCurrentBeat(1); setBrainSummary('Playback complete.') },
+      onComplete: () => { playbackHandleRef.current = null; resetTransportCursor(); setBrainSummary('Playback complete.') },
     })
-    setBrainSummary('Playing score.')
+    setBrainSummary(`Playing score at ${tempo} BPM.`)
   }
 
   function handleStop() {
     playbackHandleRef.current?.stop()
     playbackHandleRef.current = null
-    setCurrentMeasure(1)
-    setCurrentBeat(1)
+    resetTransportCursor()
     setBrainSummary('Playback stopped.')
+  }
+
+  function handleRewind() {
+    playbackHandleRef.current?.stop()
+    playbackHandleRef.current = null
+    resetTransportCursor()
+    setBrainSummary('Transport rewound to measure 1.')
+  }
+
+  function handleTempoChange(nextTempo: number) {
+    const safeTempo = clampTempo(nextTempo)
+    setTempo(safeTempo)
+    setBrainSummary(`Tempo set to ${safeTempo} BPM.`)
   }
 
   function handleComposePaletteClick(item: PaletteItem) {
@@ -222,17 +245,21 @@ export default function PromptScoreShellHarmony() {
     setTimeSignature(nextTimeSignature)
     setNotes([])
     setHarmonyProgression([])
-    setCurrentMeasure(1)
-    setCurrentBeat(1)
+    resetTransportCursor()
     setGrandStaffMode(false)
     setBrainSummary(`Meter changed to ${nextTimeSignature}. Score cleared.`)
   }
 
   const playbackControls = (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', border: '1px solid #e4e4e7', background: '#f8fafc', borderRadius: 999, padding: '4px 6px' }}>
+      <button type="button" onClick={handleRewind} style={{ border: '1px solid #d4d4d8', background: '#ffffff', borderRadius: 999, padding: '7px 10px', fontSize: 13, cursor: 'pointer' }}>⏮</button>
       <button type="button" onClick={handlePlay} disabled={notes.length === 0} style={{ border: '1px solid #111827', background: notes.length === 0 ? '#9ca3af' : '#111827', color: '#ffffff', borderRadius: 999, padding: '7px 12px', fontSize: 13, cursor: notes.length === 0 ? 'not-allowed' : 'pointer' }}>▶ Play</button>
       <button type="button" onClick={handleStop} style={{ border: '1px solid #d4d4d8', background: '#ffffff', borderRadius: 999, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}>■ Stop</button>
-      <span style={{ color: '#52525b', fontSize: 13, padding: '0 8px' }}>Tempo 92</span>
+      <button type="button" onClick={() => handleTempoChange(tempo - 4)} style={{ border: '1px solid #d4d4d8', background: '#ffffff', borderRadius: 999, padding: '7px 9px', fontSize: 13, cursor: 'pointer' }}>−</button>
+      <input type="range" min="40" max="220" step="1" value={tempo} onChange={(event) => handleTempoChange(Number(event.target.value))} style={{ width: 86 }} />
+      <button type="button" onClick={() => handleTempoChange(tempo + 4)} style={{ border: '1px solid #d4d4d8', background: '#ffffff', borderRadius: 999, padding: '7px 9px', fontSize: 13, cursor: 'pointer' }}>+</button>
+      <input type="number" min="40" max="220" value={tempo} onChange={(event) => handleTempoChange(Number(event.target.value))} style={{ width: 58, border: '1px solid #d4d4d8', borderRadius: 8, padding: '5px 6px', fontSize: 13, textAlign: 'center' }} />
+      <span style={{ color: '#52525b', fontSize: 13, paddingRight: 6 }}>BPM</span>
     </div>
   )
 
@@ -252,7 +279,7 @@ export default function PromptScoreShellHarmony() {
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input value={promptText} onChange={(event) => setPromptText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') handlePromptGenerate() }} placeholder="Try: 8 measure mozart style piano piece with alberti bass accompaniment" style={{ border: '1px solid #d4d4d8', borderRadius: 10, padding: '10px 12px', fontSize: 14, minWidth: 360 }} /><button type="button" onClick={handlePromptGenerate} style={{ border: '1px solid #111827', background: '#111827', color: '#ffffff', borderRadius: 10, padding: '10px 14px', fontSize: 14, cursor: 'pointer' }}>Generate</button></div>
           </div>
 
-          {mode === 'compose' ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Duration: <strong>{selectedDuration}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Pitch: <strong>{selectedPitch}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Accidental: <strong>{selectedAccidental || 'None'}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: restMode ? '#111827' : '#fafafa', color: restMode ? '#ffffff' : '#111827', padding: '8px 12px', fontSize: 14 }}>Rest mode: <strong>{restMode ? 'On' : 'Off'}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Position: <strong>M{currentMeasure} B{currentBeat}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: grandStaffMode ? '#111827' : '#fafafa', color: grandStaffMode ? '#ffffff' : '#111827', padding: '8px 12px', fontSize: 14 }}>Grand Staff: <strong>{grandStaffMode ? 'On' : 'Off'}</strong></div><label style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Meter: <select value={timeSignature} onChange={(event) => handleTimeSignatureChange(event.target.value as TimeSignatureValue)} style={{ border: 0, background: 'transparent', fontWeight: 700 }}>{TIME_SIGNATURES.map((meter) => <option key={meter} value={meter}>{meter}</option>)}</select></label></div> : null}
+          {mode === 'compose' ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Duration: <strong>{selectedDuration}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Pitch: <strong>{selectedPitch}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Accidental: <strong>{selectedAccidental || 'None'}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: restMode ? '#111827' : '#fafafa', color: restMode ? '#ffffff' : '#111827', padding: '8px 12px', fontSize: 14 }}>Rest mode: <strong>{restMode ? 'On' : 'Off'}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Position: <strong>M{currentMeasure} B{currentBeat}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: grandStaffMode ? '#111827' : '#fafafa', color: grandStaffMode ? '#ffffff' : '#111827', padding: '8px 12px', fontSize: 14 }}>Grand Staff: <strong>{grandStaffMode ? 'On' : 'Off'}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Tempo: <strong>{tempo} BPM</strong></div><label style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Meter: <select value={timeSignature} onChange={(event) => handleTimeSignatureChange(event.target.value as TimeSignatureValue)} style={{ border: 0, background: 'transparent', fontWeight: 700 }}>{TIME_SIGNATURES.map((meter) => <option key={meter} value={meter}>{meter}</option>)}</select></label></div> : null}
 
           <div onClick={mode === 'compose' ? handleCanvasClick : undefined} style={{ border: '1px dashed #cbd5e1', borderRadius: 14, background: '#ffffff', minHeight: 420, height: '100%', cursor: mode === 'compose' ? 'pointer' : 'default', minWidth: 0, overflow: 'hidden' }}>
             <ScoreRenderer notes={notes as any} timeSignature={timeSignature} keySignature={keySignature as any} harmonyProgression={harmonyProgression} showHarmonyOverlay={harmonyProgression.length > 0} showGrandStaff={grandStaffMode} cursorPosition={{ measure: currentMeasure, beat: currentBeat }} />
@@ -266,14 +293,14 @@ export default function PromptScoreShellHarmony() {
 
         <aside style={{ display: 'grid', gap: 12 }}>
           <PanelCard title="Inspector">{INSPECTOR_BY_MODE[mode].map((item) => <div key={item} style={{ border: '1px solid #e4e4e7', borderRadius: 10, background: '#fafafa', padding: 10, fontSize: 14 }}>{item}</div>)}</PanelCard>
-          <PanelCard title="Quick Status"><div>Mode: {MODE_LABELS[mode]}</div><div>Document: Untitled Score</div><div>Meter: {timeSignature}</div><div>Key: {keySignature}</div><div>Harmony: {harmonyProgression.length > 0 ? harmonyProgression.join(' → ') : 'None'}</div>{mode === 'compose' ? <><div>Selected Duration: {selectedDuration}</div><div>Selected Pitch: {selectedPitch}</div><div>Selected Accidental: {selectedAccidental || 'None'}</div><div>Rest Mode: {restMode ? 'On' : 'Off'}</div><div>Grand Staff: {grandStaffMode ? 'On' : 'Off'}</div><div>Melody Events: {countVoice(notes, 'melody')}</div><div>Accomp. Events: {countVoice(notes, 'accompaniment')}</div><div>Current Measure: {currentMeasure}</div><div>Current Beat: {currentBeat}</div><div>Events: {notes.length}</div></> : null}</PanelCard>
+          <PanelCard title="Quick Status"><div>Mode: {MODE_LABELS[mode]}</div><div>Document: Untitled Score</div><div>Meter: {timeSignature}</div><div>Key: {keySignature}</div><div>Tempo: {tempo} BPM</div><div>Harmony: {harmonyProgression.length > 0 ? harmonyProgression.join(' → ') : 'None'}</div>{mode === 'compose' ? <><div>Selected Duration: {selectedDuration}</div><div>Selected Pitch: {selectedPitch}</div><div>Selected Accidental: {selectedAccidental || 'None'}</div><div>Rest Mode: {restMode ? 'On' : 'Off'}</div><div>Grand Staff: {grandStaffMode ? 'On' : 'Off'}</div><div>Melody Events: {countVoice(notes, 'melody')}</div><div>Accomp. Events: {countVoice(notes, 'accompaniment')}</div><div>Current Measure: {currentMeasure}</div><div>Current Beat: {currentBeat}</div><div>Events: {notes.length}</div></> : null}</PanelCard>
           <PanelCard title={mode === 'rhythm' ? 'Rhythm Result' : 'Brain Result'}><div style={{ fontSize: 14, lineHeight: 1.5 }}>{brainSummary}</div></PanelCard>
         </aside>
       </main>
 
       <footer style={{ borderTop: '1px solid #e4e4e7', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px' }}>
         <div style={{ color: '#71717a', fontSize: 13 }}>PromptScore v1 · Organized</div>
-        <div style={{ color: '#71717a', fontSize: 13 }}>M{currentMeasure} · Beat {currentBeat}</div>
+        <div style={{ color: '#71717a', fontSize: 13 }}>M{currentMeasure} · Beat {currentBeat} · {tempo} BPM</div>
       </footer>
     </div>
   )
