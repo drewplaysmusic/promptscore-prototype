@@ -105,6 +105,11 @@ function getRangeStartBeat(startMeasure: number, timeSignature: TimeSignatureVal
   return (Math.max(1, startMeasure) - 1) * measureBeats
 }
 
+function getInferredStartMeasure(notes: PlayableNoteEvent[]): number {
+  if (notes.length === 0) return 1
+  return Math.min(...notes.map((note) => note.measure))
+}
+
 function getVoiceMix(note: PlayableNoteEvent): VoiceMix {
   if (note.voiceType === 'accompaniment' || note.voiceType === 'bass') return ACCOMPANIMENT_MIX
   if (note.chordPitches && note.chordPitches.length > 1) return ACCOMPANIMENT_MIX
@@ -145,7 +150,8 @@ export function playScoreNotes(notes: NoteEvent[], options: PlaybackOptions = {}
   const tempo = options.tempo ?? 92
   const secondsPerBeat = 60 / tempo
   const timeSignature = options.timeSignature ?? '4/4'
-  const rangeStartBeat = getRangeStartBeat(options.startMeasure ?? 1, timeSignature)
+  const playbackStartMeasure = options.startMeasure ?? getInferredStartMeasure(playableNotes)
+  const rangeStartBeat = getRangeStartBeat(playbackStartMeasure, timeSignature)
   const context = new AudioContext()
   const masterGain = context.createGain()
   masterGain.gain.setValueAtTime(0.88, context.currentTime)
