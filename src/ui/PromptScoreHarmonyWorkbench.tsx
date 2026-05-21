@@ -8,6 +8,12 @@ type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
 type TimeSignatureValue = '4/4' | '3/4' | '2/4' | '6/8'
 type KeySignatureValue = string
 
+type ChordPitch = {
+  pitch: 'C' | 'D' | 'E' | 'F' | 'G' | 'A' | 'B'
+  octave: number
+  accidental: AccidentalValue
+}
+
 type NoteEvent = {
   duration: DurationValue
   accidental: AccidentalValue
@@ -16,10 +22,29 @@ type NoteEvent = {
   measure: number
   beat: number
   octave?: number
+  chordPitches?: ChordPitch[]
+  voiceType?: 'melody' | 'accompaniment' | 'bass' | 'percussion'
 }
 
 function getMeasureCount(notes: NoteEvent[]): number {
   return Math.max(0, ...notes.map((note) => note.measure))
+}
+
+function isGeneratedAccompaniment(note: NoteEvent): boolean {
+  if (note.voiceType === 'accompaniment' || note.voiceType === 'bass') return true
+  if (note.chordPitches && note.chordPitches.length > 1) return true
+  return (note.octave ?? 4) < 5
+}
+
+function normalizeGeneratedVoices(notes: NoteEvent[]): NoteEvent[] {
+  return notes.map((note) => ({
+    ...note,
+    voiceType: isGeneratedAccompaniment(note) ? 'accompaniment' : 'melody',
+  }))
+}
+
+function countVoice(notes: NoteEvent[], voiceType: 'melody' | 'accompaniment'): number {
+  return notes.filter((note) => note.voiceType === voiceType).length
 }
 
 function PanelCard(props: { title: string; children: React.ReactNode }) {
@@ -51,14 +76,15 @@ export default function PromptScoreHarmonyWorkbench() {
     })
 
     const nextHarmony = result.harmony?.progression?.length ? result.harmony.progression : ['I', 'IV', 'V', 'I']
+    const normalizedNotes = normalizeGeneratedVoices(result.notes as NoteEvent[])
 
-    setNotes(result.notes as NoteEvent[])
+    setNotes(normalizedNotes)
     setTimeSignature(result.timeSignature)
     setKeySignature(result.keySignature)
     setHarmonyProgression(nextHarmony)
     setCurrentMeasure(1)
     setCurrentBeat(1)
-    setBrainSummary(`${result.summary} Visible harmony overlay: ${nextHarmony.join(' → ')}.`)
+    setBrainSummary(`${result.summary} Visible harmony overlay: ${nextHarmony.join(' → ')}. Voices: melody ${countVoice(normalizedNotes, 'melody')}, accompaniment ${countVoice(normalizedNotes, 'accompaniment')}.`)
   }
 
   function handlePlay() {
@@ -137,6 +163,8 @@ export default function PromptScoreHarmonyWorkbench() {
               <div>Key: {keySignature}</div>
               <div>Measures: {getMeasureCount(notes)}</div>
               <div>Events: {notes.length}</div>
+              <div>Melody Events: {countVoice(notes, 'melody')}</div>
+              <div>Accomp. Events: {countVoice(notes, 'accompaniment')}</div>
               <div>Cursor: M{currentMeasure} B{currentBeat}</div>
               <div><strong>Harmony:</strong> {harmonyProgression.length > 0 ? harmonyProgression.join(' → ') : 'None'}</div>
             </div>
