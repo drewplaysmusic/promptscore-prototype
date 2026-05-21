@@ -70,7 +70,25 @@ function getMeasureBeats(timeSignature: TimeSignatureValue): number {
 }
 
 function clampTempo(value: number): number {
-  return Math.max(40, Math.min(220, Math.round(value)))
+  return Math.max(40, Math.min(220, Math.round(value || 92)))
+}
+
+function clampMeasure(value: number, maxMeasure: number): number {
+  return Math.max(1, Math.min(Math.max(1, maxMeasure), Math.round(value || 1)))
+}
+
+function getMeasureCount(notes: NoteEvent[]): number {
+  return Math.max(1, ...notes.map((note) => note.measure))
+}
+
+function getLoopRange(start: number, end: number, maxMeasure: number): { start: number; end: number } {
+  const safeStart = clampMeasure(start, maxMeasure)
+  const safeEnd = clampMeasure(end, maxMeasure)
+  return safeStart <= safeEnd ? { start: safeStart, end: safeEnd } : { start: safeEnd, end: safeStart }
+}
+
+function getNotesInMeasureRange(notes: NoteEvent[], start: number, end: number): NoteEvent[] {
+  return notes.filter((note) => note.measure >= start && note.measure <= end)
 }
 
 function isPitchValue(value: string): value is PitchValue {
@@ -104,14 +122,9 @@ function isExplicitAccompanimentEvent(event: NoteEvent): boolean {
 
 function normalizeGeneratedVoices(events: NoteEvent[]): NoteEvent[] {
   const hasExplicitAccompaniment = events.some(isExplicitAccompanimentEvent)
-
   return events.map((event) => ({
     ...event,
-    voiceType: isExplicitAccompanimentEvent(event)
-      ? 'accompaniment'
-      : hasExplicitAccompaniment
-        ? 'melody'
-        : event.voiceType ?? 'melody',
+    voiceType: isExplicitAccompanimentEvent(event) ? 'accompaniment' : hasExplicitAccompaniment ? 'melody' : event.voiceType ?? 'melody',
   }))
 }
 
@@ -155,43 +168,76 @@ export default function PromptScoreShellHarmony() {
   const [brainSummary, setBrainSummary] = useState('Music Brain ready.')
   const [grandStaffMode, setGrandStaffMode] = useState(false)
   const [tempo, setTempo] = useState(92)
+  const [loopEnabled, setLoopEnabled] = useState(false)
+  const [loopStartMeasure, setLoopStartMeasure] = useState(1)
+  const [loopEndMeasure, setLoopEndMeasure] = useState(4)
   const playbackHandleRef = useRef<ReturnType<typeof playScoreNotes> | null>(null)
 
-  function resetTransportCursor() {
-    setCurrentMeasure(1)
+  const measureCount = getMeasureCount(notes)
+  const loopRange = getLoopRange(loopStartMeasure, loopEndMeasure, measureCount)
+
+  function resetTransportCursor(measure = 1) {
+    setCurrentMeasure(measure)
     setCurrentBeat(1)
   }
 
-  function handlePlay() {
+  function playRangeOnce(rangeStart: number, rangeEnd: number, shouldLoop: boolean) {
+    const playbackNotes = getNotesInMeasureRange(notes, rangeStart, rangeEnd)
     playbackHandleRef.current?.stop()
-    resetTransportCursor()
-    playbackHandleRef.current = playScoreNotes(notes as any, {
+    resetTransportCursor(rangeStart)
+
+    playbackHandleRef.current = playScoreNotes(playbackNotes as any, {
       tempo,
       timeSignature,
       onCursorChange: (cursor) => { setCurrentMeasure(cursor.measure); setCurrentBeat(cursor.beat) },
-      onComplete: () => { playbackHandleRef.current = null; resetTransportCursor(); setBrainSummary('Playback complete.') },
+      onComplete: () => {
+        playbackHandleRef.current = null
+        if (shouldLoop && playbackNotes.length > 0) {
+          playRangeOnce(rangeStart, rangeEnd, true)
+          return
+        }
+        resetTransportCursor(shouldLoop ? rangeStart : 1)
+        setBrainSummary('Playback complete.')
+      },
     })
-    setBrainSummary(`Playing score at ${tempo} BPM.`)
+  }
+
+  function handlePlay() {
+    const range = loopEnabled ? loopRange : { start: 1, end: measureCount }
+    playRangeOnce(range.start, range.end, loopEnabled)
+    setBrainSummary(loopEnabled ? `Looping measures ${range.start}-${range.end} at ${tempo} BPM.` : `Playing score at ${tempo} BPM.`)
   }
 
   function handleStop() {
     playbackHandleRef.current?.stop()
     playbackHandleRef.current = null
-    resetTransportCursor()
+    resetTransportCursor(loopEnabled ? loopRange.start : 1)
     setBrainSummary('Playback stopped.')
   }
 
   function handleRewind() {
     playbackHandleRef.current?.stop()
     playbackHandleRef.current = null
-    resetTransportCursor()
-    setBrainSummary('Transport rewound to measure 1.')
+    resetTransportCursor(loopEnabled ? loopRange.start : 1)
+    setBrainSummary(loopEnabled ? `Transport rewound to loop start M${loopRange.start}.` : 'Transport rewound to measure 1.')
   }
 
   function handleTempoChange(nextTempo: number) {
     const safeTempo = clampTempo(nextTempo)
     setTempo(safeTempo)
     setBrainSummary(`Tempo set to ${safeTempo} BPM.`)
+  }
+
+  function handleLoopStartChange(value: number) {
+    const nextStart = clampMeasure(value, measureCount)
+    setLoopStartMeasure(nextStart)
+    if (nextStart > loopEndMeasure) setLoopEndMeasure(nextStart)
+  }
+
+  function handleLoopEndChange(value: number) {
+    const nextEnd = clampMeasure(value, measureCount)
+    setLoopEndMeasure(nextEnd)
+    if (nextEnd < loopStartMeasure) setLoopStartMeasure(nextEnd)
   }
 
   function handleComposePaletteClick(item: PaletteItem) {
@@ -219,6 +265,7 @@ export default function PromptScoreShellHarmony() {
 
   function applyGeneratedResult(result: any, sourcePrompt: string) {
     const normalizedNotes = normalizeGeneratedVoices(result.notes as NoteEvent[])
+    const nextMeasureCount = getMeasureCount(normalizedNotes)
     setNotes(normalizedNotes)
     setTimeSignature(result.timeSignature)
     setKeySignature(result.keySignature as KeySignatureValue)
@@ -226,6 +273,8 @@ export default function PromptScoreShellHarmony() {
     setCurrentMeasure(1)
     setCurrentBeat(1)
     setPromptText('')
+    setLoopStartMeasure(1)
+    setLoopEndMeasure(Math.min(4, nextMeasureCount))
     setGrandStaffMode(shouldUseGrandStaff(sourcePrompt) || countVoice(normalizedNotes, 'accompaniment') > 0)
     setBrainSummary(`${result.summary} Voices: melody ${countVoice(normalizedNotes, 'melody')}, accompaniment ${countVoice(normalizedNotes, 'accompaniment')}.`)
   }
@@ -246,6 +295,9 @@ export default function PromptScoreShellHarmony() {
     setNotes([])
     setHarmonyProgression([])
     resetTransportCursor()
+    setLoopEnabled(false)
+    setLoopStartMeasure(1)
+    setLoopEndMeasure(4)
     setGrandStaffMode(false)
     setBrainSummary(`Meter changed to ${nextTimeSignature}. Score cleared.`)
   }
@@ -255,10 +307,15 @@ export default function PromptScoreShellHarmony() {
       <button type="button" onClick={handleRewind} style={{ border: '1px solid #d4d4d8', background: '#ffffff', borderRadius: 999, padding: '7px 10px', fontSize: 13, cursor: 'pointer' }}>⏮</button>
       <button type="button" onClick={handlePlay} disabled={notes.length === 0} style={{ border: '1px solid #111827', background: notes.length === 0 ? '#9ca3af' : '#111827', color: '#ffffff', borderRadius: 999, padding: '7px 12px', fontSize: 13, cursor: notes.length === 0 ? 'not-allowed' : 'pointer' }}>▶ Play</button>
       <button type="button" onClick={handleStop} style={{ border: '1px solid #d4d4d8', background: '#ffffff', borderRadius: 999, padding: '7px 12px', fontSize: 13, cursor: 'pointer' }}>■ Stop</button>
+      <button type="button" onClick={() => setLoopEnabled((current) => !current)} style={{ border: loopEnabled ? '1px solid #111827' : '1px solid #d4d4d8', background: loopEnabled ? '#111827' : '#ffffff', color: loopEnabled ? '#ffffff' : '#111827', borderRadius: 999, padding: '7px 10px', fontSize: 13, cursor: 'pointer' }}>↺ Loop</button>
+      <span style={{ color: '#52525b', fontSize: 12 }}>M</span>
+      <input type="number" min="1" max={measureCount} value={loopRange.start} onChange={(event) => handleLoopStartChange(Number(event.target.value))} style={{ width: 42, border: '1px solid #d4d4d8', borderRadius: 8, padding: '5px 4px', fontSize: 13, textAlign: 'center' }} />
+      <span style={{ color: '#52525b', fontSize: 12 }}>–</span>
+      <input type="number" min="1" max={measureCount} value={loopRange.end} onChange={(event) => handleLoopEndChange(Number(event.target.value))} style={{ width: 42, border: '1px solid #d4d4d8', borderRadius: 8, padding: '5px 4px', fontSize: 13, textAlign: 'center' }} />
       <button type="button" onClick={() => handleTempoChange(tempo - 4)} style={{ border: '1px solid #d4d4d8', background: '#ffffff', borderRadius: 999, padding: '7px 9px', fontSize: 13, cursor: 'pointer' }}>−</button>
-      <input type="range" min="40" max="220" step="1" value={tempo} onChange={(event) => handleTempoChange(Number(event.target.value))} style={{ width: 86 }} />
+      <input type="range" min="40" max="220" step="1" value={tempo} onChange={(event) => handleTempoChange(Number(event.target.value))} style={{ width: 72 }} />
       <button type="button" onClick={() => handleTempoChange(tempo + 4)} style={{ border: '1px solid #d4d4d8', background: '#ffffff', borderRadius: 999, padding: '7px 9px', fontSize: 13, cursor: 'pointer' }}>+</button>
-      <input type="number" min="40" max="220" value={tempo} onChange={(event) => handleTempoChange(Number(event.target.value))} style={{ width: 58, border: '1px solid #d4d4d8', borderRadius: 8, padding: '5px 6px', fontSize: 13, textAlign: 'center' }} />
+      <input type="number" min="40" max="220" value={tempo} onChange={(event) => handleTempoChange(Number(event.target.value))} style={{ width: 54, border: '1px solid #d4d4d8', borderRadius: 8, padding: '5px 6px', fontSize: 13, textAlign: 'center' }} />
       <span style={{ color: '#52525b', fontSize: 13, paddingRight: 6 }}>BPM</span>
     </div>
   )
@@ -279,13 +336,13 @@ export default function PromptScoreShellHarmony() {
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input value={promptText} onChange={(event) => setPromptText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') handlePromptGenerate() }} placeholder="Try: 8 measure mozart style piano piece with alberti bass accompaniment" style={{ border: '1px solid #d4d4d8', borderRadius: 10, padding: '10px 12px', fontSize: 14, minWidth: 360 }} /><button type="button" onClick={handlePromptGenerate} style={{ border: '1px solid #111827', background: '#111827', color: '#ffffff', borderRadius: 10, padding: '10px 14px', fontSize: 14, cursor: 'pointer' }}>Generate</button></div>
           </div>
 
-          {mode === 'compose' ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Duration: <strong>{selectedDuration}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Pitch: <strong>{selectedPitch}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Accidental: <strong>{selectedAccidental || 'None'}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: restMode ? '#111827' : '#fafafa', color: restMode ? '#ffffff' : '#111827', padding: '8px 12px', fontSize: 14 }}>Rest mode: <strong>{restMode ? 'On' : 'Off'}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Position: <strong>M{currentMeasure} B{currentBeat}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: grandStaffMode ? '#111827' : '#fafafa', color: grandStaffMode ? '#ffffff' : '#111827', padding: '8px 12px', fontSize: 14 }}>Grand Staff: <strong>{grandStaffMode ? 'On' : 'Off'}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Tempo: <strong>{tempo} BPM</strong></div><label style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Meter: <select value={timeSignature} onChange={(event) => handleTimeSignatureChange(event.target.value as TimeSignatureValue)} style={{ border: 0, background: 'transparent', fontWeight: 700 }}>{TIME_SIGNATURES.map((meter) => <option key={meter} value={meter}>{meter}</option>)}</select></label></div> : null}
+          {mode === 'compose' ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Duration: <strong>{selectedDuration}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Pitch: <strong>{selectedPitch}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Accidental: <strong>{selectedAccidental || 'None'}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: restMode ? '#111827' : '#fafafa', color: restMode ? '#ffffff' : '#111827', padding: '8px 12px', fontSize: 14 }}>Rest mode: <strong>{restMode ? 'On' : 'Off'}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Position: <strong>M{currentMeasure} B{currentBeat}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: grandStaffMode ? '#111827' : '#fafafa', color: grandStaffMode ? '#ffffff' : '#111827', padding: '8px 12px', fontSize: 14 }}>Grand Staff: <strong>{grandStaffMode ? 'On' : 'Off'}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: loopEnabled ? '#111827' : '#fafafa', color: loopEnabled ? '#ffffff' : '#111827', padding: '8px 12px', fontSize: 14 }}>Loop: <strong>{loopEnabled ? `M${loopRange.start}-${loopRange.end}` : 'Off'}</strong></div><div style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Tempo: <strong>{tempo} BPM</strong></div><label style={{ border: '1px solid #d4d4d8', borderRadius: 999, background: '#fafafa', padding: '8px 12px', fontSize: 14 }}>Meter: <select value={timeSignature} onChange={(event) => handleTimeSignatureChange(event.target.value as TimeSignatureValue)} style={{ border: 0, background: 'transparent', fontWeight: 700 }}>{TIME_SIGNATURES.map((meter) => <option key={meter} value={meter}>{meter}</option>)}</select></label></div> : null}
 
           <div onClick={mode === 'compose' ? handleCanvasClick : undefined} style={{ border: '1px dashed #cbd5e1', borderRadius: 14, background: '#ffffff', minHeight: 420, height: '100%', cursor: mode === 'compose' ? 'pointer' : 'default', minWidth: 0, overflow: 'hidden' }}>
             <ScoreRenderer notes={notes as any} timeSignature={timeSignature} keySignature={keySignature as any} harmonyProgression={harmonyProgression} showHarmonyOverlay={harmonyProgression.length > 0} showGrandStaff={grandStaffMode} cursorPosition={{ measure: currentMeasure, beat: currentBeat }} />
           </div>
 
-          <ChordCursorDebugPanel onCursorChange={(cursor) => { setCurrentMeasure(cursor.measure); setCurrentBeat(cursor.beat) }} onSendToScore={(cursorEvents) => { const nextNotes = normalizeGeneratedVoices(cursorEvents.map((event) => ({ duration: event.duration, accidental: event.accidental, octave: event.octave, chordPitches: event.chordPitches, isRest: false, pitch: event.pitch, measure: event.measure, beat: event.beat }))); setNotes(nextNotes); setHarmonyProgression([]); setGrandStaffMode(countVoice(nextNotes, 'accompaniment') > 0); if (cursorEvents.length > 0) { const lastEvent = cursorEvents[cursorEvents.length - 1]; setCurrentMeasure(lastEvent.measure); setCurrentBeat(lastEvent.beat) } setBrainSummary(`Sent ${cursorEvents.length} cursor event(s) to score. Voices: melody ${countVoice(nextNotes, 'melody')}, accompaniment ${countVoice(nextNotes, 'accompaniment')}.`) }} />
+          <ChordCursorDebugPanel onCursorChange={(cursor) => { setCurrentMeasure(cursor.measure); setCurrentBeat(cursor.beat) }} onSendToScore={(cursorEvents) => { const nextNotes = normalizeGeneratedVoices(cursorEvents.map((event) => ({ duration: event.duration, accidental: event.accidental, octave: event.octave, chordPitches: event.chordPitches, isRest: false, pitch: event.pitch, measure: event.measure, beat: event.beat }))); const nextCount = getMeasureCount(nextNotes); setNotes(nextNotes); setHarmonyProgression([]); setLoopStartMeasure(1); setLoopEndMeasure(Math.min(4, nextCount)); setGrandStaffMode(countVoice(nextNotes, 'accompaniment') > 0); if (cursorEvents.length > 0) { const lastEvent = cursorEvents[cursorEvents.length - 1]; setCurrentMeasure(lastEvent.measure); setCurrentBeat(lastEvent.beat) } setBrainSummary(`Sent ${cursorEvents.length} cursor event(s) to score. Voices: melody ${countVoice(nextNotes, 'melody')}, accompaniment ${countVoice(nextNotes, 'accompaniment')}.`) }} />
           <PitchEngineDebugPanel />
           <PromptIntentDebugPanel />
           <RhythmTreeDebugPanel />
@@ -293,14 +350,14 @@ export default function PromptScoreShellHarmony() {
 
         <aside style={{ display: 'grid', gap: 12 }}>
           <PanelCard title="Inspector">{INSPECTOR_BY_MODE[mode].map((item) => <div key={item} style={{ border: '1px solid #e4e4e7', borderRadius: 10, background: '#fafafa', padding: 10, fontSize: 14 }}>{item}</div>)}</PanelCard>
-          <PanelCard title="Quick Status"><div>Mode: {MODE_LABELS[mode]}</div><div>Document: Untitled Score</div><div>Meter: {timeSignature}</div><div>Key: {keySignature}</div><div>Tempo: {tempo} BPM</div><div>Harmony: {harmonyProgression.length > 0 ? harmonyProgression.join(' → ') : 'None'}</div>{mode === 'compose' ? <><div>Selected Duration: {selectedDuration}</div><div>Selected Pitch: {selectedPitch}</div><div>Selected Accidental: {selectedAccidental || 'None'}</div><div>Rest Mode: {restMode ? 'On' : 'Off'}</div><div>Grand Staff: {grandStaffMode ? 'On' : 'Off'}</div><div>Melody Events: {countVoice(notes, 'melody')}</div><div>Accomp. Events: {countVoice(notes, 'accompaniment')}</div><div>Current Measure: {currentMeasure}</div><div>Current Beat: {currentBeat}</div><div>Events: {notes.length}</div></> : null}</PanelCard>
+          <PanelCard title="Quick Status"><div>Mode: {MODE_LABELS[mode]}</div><div>Document: Untitled Score</div><div>Meter: {timeSignature}</div><div>Key: {keySignature}</div><div>Tempo: {tempo} BPM</div><div>Loop: {loopEnabled ? `M${loopRange.start}-${loopRange.end}` : 'Off'}</div><div>Harmony: {harmonyProgression.length > 0 ? harmonyProgression.join(' → ') : 'None'}</div>{mode === 'compose' ? <><div>Selected Duration: {selectedDuration}</div><div>Selected Pitch: {selectedPitch}</div><div>Selected Accidental: {selectedAccidental || 'None'}</div><div>Rest Mode: {restMode ? 'On' : 'Off'}</div><div>Grand Staff: {grandStaffMode ? 'On' : 'Off'}</div><div>Melody Events: {countVoice(notes, 'melody')}</div><div>Accomp. Events: {countVoice(notes, 'accompaniment')}</div><div>Current Measure: {currentMeasure}</div><div>Current Beat: {currentBeat}</div><div>Events: {notes.length}</div></> : null}</PanelCard>
           <PanelCard title={mode === 'rhythm' ? 'Rhythm Result' : 'Brain Result'}><div style={{ fontSize: 14, lineHeight: 1.5 }}>{brainSummary}</div></PanelCard>
         </aside>
       </main>
 
       <footer style={{ borderTop: '1px solid #e4e4e7', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px' }}>
-        <div style={{ color: '#71717a', fontSize: 13 }}>PromptScore v1 · Organized</div>
-        <div style={{ color: '#71717a', fontSize: 13 }}>M{currentMeasure} · Beat {currentBeat} · {tempo} BPM</div>
+        <div style={{ color: '#71717a', fontSize: 13 }}>PromptScore v1 · Loop Transport</div>
+        <div style={{ color: '#71717a', fontSize: 13 }}>M{currentMeasure} · Beat {currentBeat} · {tempo} BPM{loopEnabled ? ` · Loop M${loopRange.start}-${loopRange.end}` : ''}</div>
       </footer>
     </div>
   )
