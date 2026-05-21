@@ -13,7 +13,7 @@ export type StylePlan = {
 
 const DEFAULT_STYLE_PLAN: StylePlan = {
   style: 'unknown',
-  rhythmPattern: ['Quarter', 'Quarter', 'Half'],
+  rhythmPattern: ['Quarter', 'Eighth', 'Eighth', 'Quarter'],
   contour: [0, 1, 2, 4, 3, 2, 1, 0],
   cadenceDegrees: [4, 1, 0],
   phraseLength: 4,
@@ -34,25 +34,25 @@ const STYLE_PLANS: Record<PromptStyleTag, StylePlan> = {
   },
   mozart: {
     style: 'mozart',
-    rhythmPattern: ['Quarter', 'Eighth', 'Eighth', 'Half'],
+    rhythmPattern: ['16th', '16th', 'Eighth', 'Quarter', 'Eighth', 'Quarter'],
     contour: [0, 1, 2, 4, 3, 2, 1, 0, 2, 4, 5, 4, 2, 1, 0],
     cadenceDegrees: [4, 2, 1, 0],
     phraseLength: 4,
     leapFrequency: 'medium',
-    summary: 'classical/Mozart-like phrase with balanced question-answer contour and clear cadence',
+    summary: 'classical/Mozart-like phrase with balanced question-answer contour and active rhythmic motion',
   },
   classical: {
     style: 'classical',
-    rhythmPattern: ['Quarter', 'Eighth', 'Eighth', 'Half'],
+    rhythmPattern: ['Eighth', 'Eighth', '16th', '16th', 'Quarter', 'Quarter'],
     contour: [0, 1, 2, 4, 3, 2, 1, 0, 2, 4, 3, 2, 1, 0],
     cadenceDegrees: [4, 2, 1, 0],
     phraseLength: 4,
     leapFrequency: 'medium',
-    summary: 'balanced classical phrase with light motion and cadence focus',
+    summary: 'balanced classical phrase with active subdivision and cadence focus',
   },
   folk: {
     style: 'folk',
-    rhythmPattern: ['Quarter', 'Eighth', 'Eighth', 'Half'],
+    rhythmPattern: ['Quarter', 'Eighth', 'Eighth', 'Quarter', 'Quarter'],
     contour: [0, 2, 1, 0, 3, 2, 1, 0, 4, 3, 2, 0],
     cadenceDegrees: [3, 2, 1, 0],
     phraseLength: 4,
@@ -61,39 +61,39 @@ const STYLE_PLANS: Record<PromptStyleTag, StylePlan> = {
   },
   country: {
     style: 'country',
-    rhythmPattern: ['Eighth', 'Eighth', 'Quarter', 'Half'],
+    rhythmPattern: ['16th', '16th', 'Eighth', 'Quarter', 'Eighth', 'Quarter'],
     contour: [0, 2, 4, 2, 0, 2, 3, 2, 0, 1, 2, 0],
     cadenceDegrees: [4, 2, 1, 0],
     phraseLength: 4,
     leapFrequency: 'medium',
-    summary: 'country-like melodic turn with small hooks and tonic returns',
+    summary: 'country-like melodic turn with pickup-style rhythmic motion and tonic returns',
   },
   jazz: {
     style: 'jazz',
-    rhythmPattern: ['Eighth', 'Quarter', 'Eighth', 'Half'],
+    rhythmPattern: ['TripletEighth', 'TripletEighth', 'TripletEighth', 'Quarter', 'Eighth', 'Quarter'],
     contour: [0, 2, 4, 5, 3, 4, 6, 5, 3, 2, 0],
     cadenceDegrees: [6, 4, 2, 0],
     phraseLength: 4,
     leapFrequency: 'high',
-    summary: 'jazz-like angular contour with more skips and syncopated rhythm profile',
+    summary: 'jazz-like angular contour with syncopated triplet subdivision and skips',
   },
   pop: {
     style: 'pop',
-    rhythmPattern: ['Quarter', 'Quarter', 'Eighth', 'Eighth', 'Quarter'],
+    rhythmPattern: ['Quarter', 'Eighth', 'Eighth', '16th', '16th', 'Quarter'],
     contour: [0, 0, 2, 2, 4, 3, 2, 1, 0],
     cadenceDegrees: [4, 2, 1, 0],
     phraseLength: 4,
     leapFrequency: 'medium',
-    summary: 'pop-like repeated hook contour with clear phrase resolution',
+    summary: 'pop-like repeated hook contour with mixed subdivision and clear phrase resolution',
   },
   march: {
     style: 'march',
-    rhythmPattern: ['Quarter', 'Quarter', 'Quarter', 'Quarter'],
+    rhythmPattern: ['Eighth', 'Eighth', 'Quarter', 'Quarter', 'Quarter'],
     contour: [0, 2, 4, 2, 0, 4, 3, 2, 1, 0],
     cadenceDegrees: [4, 2, 1, 0],
     phraseLength: 4,
     leapFrequency: 'medium',
-    summary: 'march-like steady rhythm with bold tonic-dominant motion',
+    summary: 'march-like rhythmic drive with strong pulse and subdivision support',
   },
 }
 
@@ -111,8 +111,8 @@ function applyDensity(plan: StylePlan, density: PromptDensity): StylePlan {
   if (density === 'busy') {
     return {
       ...plan,
-      rhythmPattern: ['Eighth', 'Eighth', 'Quarter', 'Eighth', 'Eighth', 'Quarter'],
-      summary: `${plan.summary}; busier rhythmic surface`,
+      rhythmPattern: ['16th', '16th', 'Eighth', '16th', '16th', 'Eighth', 'Quarter'],
+      summary: `${plan.summary}; busier rhythmic surface with sixteenth-note activity`,
     }
   }
 
