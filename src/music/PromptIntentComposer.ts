@@ -3,7 +3,7 @@ import { parsePromptIntent } from './PromptIntentEngine'
 import { getStylePlan, getStyleScaleDegree } from './StyleEngine'
 import { generateHarmonyPlan, type HarmonyPlan, type RomanNumeral } from './harmonyBrain'
 import { chooseChordAwareScaleDegree, getChordToneSet, type ChordToneSet } from './HarmonyTheoryEngine'
-import type { AccidentalValue, KeySignatureValue, NoteEvent, TimeSignatureValue } from './musicBrain'
+import type { AccidentalValue, DurationValue, KeySignatureValue, NoteEvent, TimeSignatureValue } from './musicBrain'
 
 type ComposerDefaults = {
   duration: NoteEvent['duration']
@@ -27,6 +27,10 @@ type ScaleTone = {
 
 type GeneratedNoteEvent = NoteEvent & {
   voiceType?: 'melody' | 'accompaniment' | 'bass' | 'percussion'
+  tupletGroupId?: string
+  ratioLabel?: string
+  beamGroupId?: string
+  bracketGroupId?: string
   chordPitches?: Array<{
     pitch: NoteEvent['pitch']
     accidental: AccidentalValue
@@ -37,6 +41,18 @@ type GeneratedNoteEvent = NoteEvent & {
 type AccompanimentPattern = 'held-pad' | 'block-chords' | 'bass-chords' | 'arpeggio' | 'alberti'
 
 const ACCOMPANIMENT_OCTAVE = 4
+const TRIPLET_PATTERN: DurationValue[] = [
+  'TripletEighth', 'TripletEighth', 'TripletEighth',
+  'TripletEighth', 'TripletEighth', 'TripletEighth',
+  'TripletEighth', 'TripletEighth', 'TripletEighth',
+  'TripletEighth', 'TripletEighth', 'TripletEighth',
+]
+const SIXTEENTH_PATTERN: DurationValue[] = [
+  '16th', '16th', '16th', '16th',
+  '16th', '16th', '16th', '16th',
+  '16th', '16th', '16th', '16th',
+  '16th', '16th', '16th', '16th',
+]
 
 const MAJOR_SCALES: Record<string, ScaleTone[]> = {
   C: [
@@ -130,6 +146,46 @@ function getHarmonyForMeasure(harmony: HarmonyPlan, measureIndex: number): Roman
 function promptHasAny(prompt: string, words: string[]): boolean {
   const normalized = prompt.toLowerCase()
   return words.some((word) => normalized.includes(word))
+}
+
+function wantsTripletTexture(prompt: string): boolean {
+  return promptHasAny(prompt, ['triplet', 'triplets', '3:2', 'three over two'])
+}
+
+function wantsSixteenthTexture(prompt: string): boolean {
+  return promptHasAny(prompt, [
+    'continuous sixteenth', 'continuous 16th', 'sixteenth note run', 'sixteenth note runs',
+    '16th note run', '16th note runs', 'sixteenth-note run', 'sixteenth-note runs',
+    'fast classical etude', 'virtuosic classical etude',
+  ])
+}
+
+function getMelodyRhythmPattern(prompt: string, fallbackPattern: DurationValue[]): DurationValue[] {
+  if (wantsTripletTexture(prompt)) return TRIPLET_PATTERN
+  if (wantsSixteenthTexture(prompt)) return SIXTEENTH_PATTERN
+  return fallbackPattern
+}
+
+function tagTripletGroups(events: GeneratedNoteEvent[]): GeneratedNoteEvent[] {
+  const tripletCountsByMeasureAndBeat = new Map<string, number>()
+
+  return events.map((event) => {
+    if (event.duration !== 'TripletEighth') return event
+    const beatBucket = Math.floor(event.beat)
+    const key = `${event.measure}-${beatBucket}-${event.voiceType ?? 'melody'}`
+    const count = tripletCountsByMeasureAndBeat.get(key) ?? 0
+    tripletCountsByMeasureAndBeat.set(key, count + 1)
+    const groupNumber = Math.floor(count / 3)
+    const groupId = `triplet-${event.voiceType ?? 'melody'}-${event.measure}-${beatBucket}-${groupNumber}`
+
+    return {
+      ...event,
+      tupletGroupId: groupId,
+      beamGroupId: groupId,
+      bracketGroupId: groupId,
+      ratioLabel: '3:2',
+    }
+  })
 }
 
 function wantsPrintedAccompaniment(prompt: string): boolean {
@@ -248,8 +304,9 @@ export function generatePromptIntentScore(prompt: string, defaults: ComposerDefa
   const keySignature = getKeySignature(intent.keyRoot, intent.mode)
   const scale = getScale(intent.keyRoot, intent.mode)
   const stylePlan = getStylePlan(intent.style, intent.density)
+  const melodyRhythmPattern = getMelodyRhythmPattern(prompt, stylePlan.rhythmPattern)
   const harmony = generateHarmonyPlan(prompt, intent.style === 'mozart' ? 'classical' : intent.style, getScaleModeLabel(intent.mode))
-  const measurePlans = fillMeasuresWithPattern(intent.measureCount, stylePlan.rhythmPattern, timeSignature)
+  const measurePlans = fillMeasuresWithPattern(intent.measureCount, melodyRhythmPattern, timeSignature)
   const totalEvents = countPlannedEvents(measurePlans)
   const melodyNotes: GeneratedNoteEvent[] = []
   let eventIndex = 0
@@ -286,13 +343,15 @@ export function generatePromptIntentScore(prompt: string, defaults: ComposerDefa
   })
 
   const accompanimentNotes = createAccompanimentEvents(harmony, intent.keyRoot, intent.mode, intent.measureCount, timeSignature, prompt)
-  const notes = [...accompanimentNotes, ...melodyNotes].sort((a, b) => (a.measure - b.measure) || (a.beat - b.beat) || ((a.octave ?? 4) - (b.octave ?? 4)))
+  const notes = tagTripletGroups([...accompanimentNotes, ...melodyNotes]).sort((a, b) => (a.measure - b.measure) || (a.beat - b.beat) || ((a.octave ?? 4) - (b.octave ?? 4)))
+  const tripletSummary = wantsTripletTexture(prompt) ? ' Triplet override: grouped repeated 3:2 eighth-note tuplets.' : ''
+  const sixteenthSummary = wantsSixteenthTexture(prompt) ? ' Sixteenth override: continuous sixteenth-note melody pattern.' : ''
 
   return {
     notes: notes as NoteEvent[],
     timeSignature,
     keySignature,
     harmony,
-    summary: `${intent.summary} Harmony: ${harmony.progression.join(' → ')}. StyleEngine: ${stylePlan.summary}. Generated ${melodyNotes.length} melody event(s)${accompanimentNotes.length > 0 ? ` and ${accompanimentNotes.length} accompaniment event(s)` : ''} across ${intent.measureCount} exactly filled measures.`,
+    summary: `${intent.summary} Harmony: ${harmony.progression.join(' → ')}. StyleEngine: ${stylePlan.summary}.${tripletSummary}${sixteenthSummary} Generated ${melodyNotes.length} melody event(s)${accompanimentNotes.length > 0 ? ` and ${accompanimentNotes.length} accompaniment event(s)` : ''} across ${intent.measureCount} exactly filled measures.`,
   }
 }
