@@ -32,6 +32,8 @@ type NoteEvent = {
 
 type VoiceLane = 'melody' | 'accompaniment'
 
+type RhythmStaffLineCount = 1 | 2 | 3 | 4 | 5
+
 function isDottedDuration(duration: DurationValue): boolean {
   return duration === 'DottedHalf' || duration === 'DottedQuarter' || duration === 'DottedEighth'
 }
@@ -41,6 +43,28 @@ function getUndottedDuration(duration: DurationValue): DurationValue {
   if (duration === 'DottedQuarter') return 'Quarter'
   if (duration === 'DottedEighth') return 'Eighth'
   return duration
+}
+
+function getRhythmLabMetadata(lineCount: RhythmStaffLineCount) {
+  return {
+    notationScale: lineCount === 1 ? 1.35 : 1.18,
+    spacingMultiplier: lineCount === 1 ? 1.45 : 1.18,
+    lineSpacing: lineCount === 1 ? 18 : 12,
+    percussionMode: lineCount === 1,
+  }
+}
+
+function getEducationalPitchConstraint(pitch: PitchValue, lineCount: RhythmStaffLineCount): PitchValue {
+  const visible: PitchValue[] = ['E', 'G', 'B', 'D', 'F'].slice(0, lineCount) as PitchValue[]
+  return visible.includes(pitch) ? pitch : visible[0]
+}
+
+function normalizeRhythmLabNotes(notes: NoteEvent[], lineCount: RhythmStaffLineCount): NoteEvent[] {
+  return notes.map((note) => ({
+    ...note,
+    pitch: getEducationalPitchConstraint(note.pitch, lineCount),
+    octave: 4,
+  }))
 }
 
 function getVexDuration(duration: DurationValue, isRest: boolean): string {
@@ -236,7 +260,7 @@ function drawVoiceLane(context: any, stave: Stave, notes: NoteEvent[], timeSigna
   grouped.tuplets.forEach((tuplet) => tuplet.setContext(context).draw())
 }
 
-export default function ScoreRenderer({ notes, timeSignature, keySignature, harmonyProgression = [], showHarmonyOverlay = false, showGrandStaff = false, cursorPosition }: {
+export default function ScoreRenderer({ notes, timeSignature, keySignature, harmonyProgression = [], showHarmonyOverlay = false, showGrandStaff = false, cursorPosition, showRhythmStaff = false, rhythmStaffLineCount = 1 }: {
   notes: NoteEvent[]
   timeSignature: TimeSignatureValue
   keySignature: KeySignatureValue
@@ -244,21 +268,25 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
   showHarmonyOverlay?: boolean
   showGrandStaff?: boolean
   cursorPosition?: ScoreCursorPosition
+  showRhythmStaff?: boolean
+  rhythmStaffLineCount?: RhythmStaffLineCount
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [zoom, setZoom] = useState(1)
   const harmonyLabels = harmonyProgression || []
-  const accompanimentVisible = showGrandStaff && hasAccompaniment(notes)
+  const accompanimentVisible = !showRhythmStaff && showGrandStaff && hasAccompaniment(notes)
+  const normalizedNotes = showRhythmStaff ? normalizeRhythmLabNotes(notes, rhythmStaffLineCount) : notes
+  const rhythmMetadata = getRhythmLabMetadata(rhythmStaffLineCount)
 
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
     container.innerHTML = ''
-    if (notes.length === 0) return
+    if (normalizedNotes.length === 0) return
 
-    const measureGroups = groupNotesByMeasure(notes)
+    const measureGroups = groupNotesByMeasure(normalizedNotes)
     const renderer = new Renderer(container, Renderer.Backends.SVG)
-    const systemHeight = accompanimentVisible ? 212 : 132
+    const systemHeight = accompanimentVisible ? 212 : showRhythmStaff ? 154 : 132
     const rendererHeight = Math.max(760, 120 + Math.ceil(measureGroups.length / 3) * systemHeight)
     renderer.resize(1180, rendererHeight)
     const context = renderer.getContext()
@@ -268,12 +296,16 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
       const measureInSystem = measureIndex % 3
       const y = 64 + systemIndex * systemHeight
       const x = 36 + measureInSystem * 372
-      const staveWidth = 372
+      const staveWidth = showRhythmStaff ? 408 : 372
       const melodyNotes = measureNotes.filter((note) => inferLane(note) === 'melody')
       const accompanimentNotes = measureNotes.filter((note) => inferLane(note) === 'accompaniment')
       const topStave = new Stave(x, y, staveWidth)
 
-      if (measureInSystem === 0) topStave.addClef('treble')
+      if (showRhythmStaff) {
+        topStave.setConfigForLines(Array.from({ length: rhythmStaffLineCount }, () => ({ visible: true })))
+      }
+
+      if (!showRhythmStaff && measureInSystem === 0) topStave.addClef('treble')
       if (measureIndex === 0) {
         topStave.addKeySignature(getVexKeySignature(keySignature))
         topStave.addTimeSignature(timeSignature)
@@ -281,8 +313,11 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
 
       topStave.setContext(context)
       topStave.draw()
+
       if (measureInSystem === 0 && accompanimentVisible) drawText(context, 'Melody up', x - 6, y + 28)
-      drawVoiceLane(context, topStave, accompanimentVisible ? melodyNotes : measureNotes, timeSignature, staveWidth, 'melody')
+      if (showRhythmStaff && measureInSystem === 0) drawText(context, `RhythmLab · ${rhythmStaffLineCount} line${rhythmStaffLineCount > 1 ? 's' : ''} · E anchor`, x - 2, y - 12)
+
+      drawVoiceLane(context, topStave, accompanimentVisible ? melodyNotes : measureNotes, timeSignature, staveWidth * rhythmMetadata.spacingMultiplier, 'melody')
 
       if (accompanimentVisible) {
         const lowerStave = new Stave(x, y + 82, staveWidth)
@@ -308,13 +343,15 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
 
       drawScoreCursor(context as any, x, y, staveWidth, cursorPosition, measureIndex, timeSignature, accompanimentVisible ? 174 : 92)
     })
-  }, [notes, timeSignature, keySignature, cursorPosition, accompanimentVisible])
+  }, [normalizedNotes, timeSignature, keySignature, cursorPosition, accompanimentVisible, showRhythmStaff, rhythmStaffLineCount])
 
   return (
     <div style={{ marginTop: 16, width: '100%', border: '1px solid #d4d4d8', borderRadius: 14, background: '#f8fafc', overflow: 'hidden' }}>
       <div style={{ height: 38, borderBottom: '1px solid #d4d4d8', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px' }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: '#71717a', textTransform: 'uppercase' }}>
-          Score Timeline · {accompanimentVisible ? 'Voice-Aware Grand Staff' : 'PulseGrid'} · {keySignature}{showHarmonyOverlay ? ' · Harmony Overlay' : ''}
+          {showRhythmStaff
+            ? `RhythmLab · ${rhythmStaffLineCount} Line Educational Staff · E Progression`
+            : `Score Timeline · ${accompanimentVisible ? 'Voice-Aware Grand Staff' : 'PulseGrid'} · ${keySignature}${showHarmonyOverlay ? ' · Harmony Overlay' : ''}`}
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -326,10 +363,10 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
       </div>
 
       <div style={{ minHeight: 500, maxHeight: 900, overflow: 'auto', padding: 0, background: 'linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%)' }}>
-        <div style={{ width: 1180, minHeight: 760, background: 'transparent', boxShadow: 'none', transform: `scale(${zoom})`, transformOrigin: 'top left', padding: '6px 8px 24px' }}>
+        <div style={{ width: 1180, minHeight: 760, background: 'transparent', boxShadow: 'none', transform: `scale(${zoom * rhythmMetadata.notationScale})`, transformOrigin: 'top left', padding: '6px 8px 24px' }}>
           {showHarmonyOverlay && harmonyLabels.length > 0 ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 372px)', rowGap: accompanimentVisible ? 182 : 102, padding: '12px 36px 0', fontSize: 18, fontWeight: 800, color: '#111827', pointerEvents: 'none' }}>
-              {Array.from({ length: Math.max(1, ...notes.map((note) => note.measure), harmonyLabels.length) }).map((_, index) => (
+              {Array.from({ length: Math.max(1, ...normalizedNotes.map((note) => note.measure), harmonyLabels.length) }).map((_, index) => (
                 <div key={`harmony-${index}`} style={{ paddingLeft: index % 3 === 0 ? 88 : 22 }}>
                   {harmonyLabels[index % harmonyLabels.length]}
                 </div>
@@ -337,7 +374,7 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
             </div>
           ) : null}
 
-          {notes.length === 0 ? (
+          {normalizedNotes.length === 0 ? (
             <div style={{ color: '#71717a', textAlign: 'center', paddingTop: 120 }}>
               Add notes to render the score timeline.
             </div>
