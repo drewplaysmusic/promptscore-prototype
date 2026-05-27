@@ -31,7 +31,6 @@ type NoteEvent = {
 }
 
 type VoiceLane = 'melody' | 'accompaniment'
-
 type RhythmStaffLineCount = 1 | 2 | 3 | 4 | 5
 
 function isDottedDuration(duration: DurationValue): boolean {
@@ -139,7 +138,35 @@ function isBeamable(note: NoteEvent): boolean {
 
 function makeAutoBeamKey(note: NoteEvent): string {
   const beatBucket = Math.floor(note.beat)
-  return `auto-${note.measure}-${beatBucket}`
+  const subdivisionBucket = note.duration === '16th' ? Math.floor((note.beat - beatBucket) * 4) : 0
+  return `auto-${note.measure}-${beatBucket}-${note.duration === '16th' ? Math.floor(subdivisionBucket / 4) : 0}`
+}
+
+function getBeatBucket(note: NoteEvent): number {
+  return Math.floor(note.beat)
+}
+
+function getExplicitGroupId(note: NoteEvent): string {
+  return note.bracketGroupId || note.tupletGroupId || note.beamGroupId || ''
+}
+
+function makeTripletGroupId(note: NoteEvent): string {
+  const explicit = getExplicitGroupId(note)
+  if (explicit) return explicit
+  return `triplet-${note.measure}-${getBeatBucket(note)}-${note.voiceType ?? 'voice'}`
+}
+
+function getDenseRhythmRatio(notes: NoteEvent[]): number {
+  if (notes.length === 0) return 0
+  const dense = notes.filter((note) => note.duration === '16th' || note.duration === 'TripletEighth').length
+  return dense / notes.length
+}
+
+function getFormatWidth(baseWidth: number, notes: NoteEvent[]): number {
+  const denseRatio = getDenseRhythmRatio(notes)
+  const denseBonus = denseRatio > 0.7 ? 72 : denseRatio > 0.35 ? 42 : 0
+  const noteCountBonus = Math.max(0, notes.length - 8) * 8
+  return Math.max(180, baseWidth - 92 + denseBonus + noteCountBonus)
 }
 
 function drawText(context: any, text: string, x: number, y: number) {
@@ -171,39 +198,44 @@ function drawScoreCursor(context: any, x: number, y: number, staveWidth: number,
 function getSmartBeamsAndTuplets(vexNotes: StaveNote[], notes: NoteEvent[]): { beams: Beam[]; tuplets: Tuplet[] } {
   const beams: Beam[] = []
   const tuplets: Tuplet[] = []
-  const explicitGroups = new Map<string, StaveNote[]>()
-  const autoGroups = new Map<string, StaveNote[]>()
+  const tripletGroups = new Map<string, StaveNote[]>()
+  const beamGroups = new Map<string, StaveNote[]>()
 
   notes.forEach((note, index) => {
     if (!isBeamable(note)) return
+    const vexNote = vexNotes[index]
+    if (!vexNote) return
 
-    const explicitId = note.bracketGroupId || note.tupletGroupId || note.ratioLabel || note.beamGroupId || ''
-    if (explicitId) {
-      const group = explicitGroups.get(explicitId) ?? []
-      group.push(vexNotes[index])
-      explicitGroups.set(explicitId, group)
+    if (note.duration === 'TripletEighth') {
+      const tripletId = makeTripletGroupId(note)
+      const group = tripletGroups.get(tripletId) ?? []
+      group.push(vexNote)
+      tripletGroups.set(tripletId, group)
       return
     }
 
-    const autoId = makeAutoBeamKey(note)
-    const group = autoGroups.get(autoId) ?? []
-    group.push(vexNotes[index])
-    autoGroups.set(autoId, group)
+    const explicitId = getExplicitGroupId(note)
+    const beatLocalId = explicitId ? `${explicitId}-${getBeatBucket(note)}` : makeAutoBeamKey(note)
+    const group = beamGroups.get(beatLocalId) ?? []
+    group.push(vexNote)
+    beamGroups.set(beatLocalId, group)
   })
 
-  explicitGroups.forEach((group, id) => {
-    if (group.length < 2) return
-    beams.push(new Beam(group))
-
-    if (id.includes('triplet') || id.includes('3:2')) {
-      tuplets.push(new Tuplet(group, {
-        num_notes: 3,
-        notes_occupied: 2,
-      } as any))
+  tripletGroups.forEach((group) => {
+    for (let index = 0; index < group.length; index += 3) {
+      const slice = group.slice(index, index + 3)
+      if (slice.length < 2) continue
+      beams.push(new Beam(slice))
+      if (slice.length === 3) {
+        tuplets.push(new Tuplet(slice, {
+          num_notes: 3,
+          notes_occupied: 2,
+        } as any))
+      }
     }
   })
 
-  autoGroups.forEach((group) => {
+  beamGroups.forEach((group) => {
     if (group.length < 2) return
     beams.push(new Beam(group))
   })
@@ -254,7 +286,7 @@ function drawVoiceLane(context: any, stave: Stave, notes: NoteEvent[], timeSigna
   voice.addTickables(vexNotes)
 
   const grouped = getSmartBeamsAndTuplets(vexNotes, notes)
-  new Formatter().joinVoices([voice]).format([voice], staveWidth - 92)
+  new Formatter().joinVoices([voice]).format([voice], getFormatWidth(staveWidth, notes))
   voice.draw(context, stave)
   grouped.beams.forEach((beam) => beam.setContext(context).draw())
   grouped.tuplets.forEach((tuplet) => tuplet.setContext(context).draw())
@@ -294,9 +326,11 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
     measureGroups.forEach((measureNotes, measureIndex) => {
       const systemIndex = Math.floor(measureIndex / 3)
       const measureInSystem = measureIndex % 3
+      const denseRatio = getDenseRhythmRatio(measureNotes)
+      const measureSlotWidth = denseRatio > 0.5 ? 392 : 372
       const y = 64 + systemIndex * systemHeight
-      const x = 36 + measureInSystem * 372
-      const staveWidth = showRhythmStaff ? 408 : 372
+      const x = 36 + measureInSystem * measureSlotWidth
+      const staveWidth = showRhythmStaff ? 428 : denseRatio > 0.5 ? 392 : 372
       const melodyNotes = measureNotes.filter((note) => inferLane(note) === 'melody')
       const accompanimentNotes = measureNotes.filter((note) => inferLane(note) === 'accompaniment')
       const topStave = new Stave(x, y, staveWidth)
