@@ -110,6 +110,98 @@ function getVoiceConfig(timeSignature: TimeSignatureValue): { num_beats: number;
   return { num_beats: 4, beat_value: 4 }
 }
 
+function getMeasureBeats(timeSignature: TimeSignatureValue): number {
+  if (timeSignature === '3/4') return 3
+  if (timeSignature === '2/4') return 2
+  if (timeSignature === '6/8') return 3
+  return 4
+}
+
+function getDurationBeats(duration: DurationValue): number {
+  if (duration === 'Whole') return 4
+  if (duration === 'DottedHalf') return 3
+  if (duration === 'Half') return 2
+  if (duration === 'DottedQuarter') return 1.5
+  if (duration === 'Quarter') return 1
+  if (duration === 'DottedEighth') return 0.75
+  if (duration === 'Eighth') return 0.5
+  if (duration === 'TripletEighth') return 1 / 3
+  return 0.25
+}
+
+function isCloseEnough(a: number, b: number): boolean {
+  return Math.abs(a - b) < 0.001
+}
+
+function getLargestPlainDurationThatFits(beats: number): DurationValue {
+  if (beats >= 4 || isCloseEnough(beats, 4)) return 'Whole'
+  if (beats >= 3 || isCloseEnough(beats, 3)) return 'DottedHalf'
+  if (beats >= 2 || isCloseEnough(beats, 2)) return 'Half'
+  if (beats >= 1.5 || isCloseEnough(beats, 1.5)) return 'DottedQuarter'
+  if (beats >= 1 || isCloseEnough(beats, 1)) return 'Quarter'
+  if (beats >= 0.75 || isCloseEnough(beats, 0.75)) return 'DottedEighth'
+  if (beats >= 0.5 || isCloseEnough(beats, 0.5)) return 'Eighth'
+  return '16th'
+}
+
+function makeRenderRest(base: NoteEvent, duration: DurationValue, beat: number, lane: VoiceLane): NoteEvent {
+  return {
+    duration,
+    accidental: null,
+    isRest: true,
+    pitch: lane === 'accompaniment' ? 'D' : 'B',
+    octave: lane === 'accompaniment' ? 3 : 4,
+    measure: base.measure,
+    beat,
+    voiceType: lane,
+  }
+}
+
+function fillRenderRests(base: NoteEvent, startBeat: number, endBeat: number, lane: VoiceLane): NoteEvent[] {
+  const rests: NoteEvent[] = []
+  let cursor = startBeat
+  while (cursor < endBeat && !isCloseEnough(cursor, endBeat)) {
+    const remaining = endBeat - cursor
+    const duration = getLargestPlainDurationThatFits(remaining)
+    const durationBeats = getDurationBeats(duration)
+    if (durationBeats <= 0) break
+    rests.push(makeRenderRest(base, duration, cursor, lane))
+    cursor += durationBeats
+  }
+  return rests
+}
+
+function normalizeVoiceMeasureForRender(notes: NoteEvent[], timeSignature: TimeSignatureValue, lane: VoiceLane): NoteEvent[] {
+  if (notes.length === 0) return []
+  const measureEndBeat = getMeasureBeats(timeSignature) + 1
+  const sorted = [...notes].sort((a, b) => a.beat - b.beat)
+  const output: NoteEvent[] = []
+  let cursor = 1
+
+  sorted.forEach((note) => {
+    const noteStart = Math.max(1, note.beat)
+    const durationBeats = getDurationBeats(note.duration)
+    const noteEnd = noteStart + durationBeats
+
+    if (noteStart > cursor + 0.001) {
+      output.push(...fillRenderRests(note, cursor, Math.min(noteStart, measureEndBeat), lane))
+      cursor = noteStart
+    }
+
+    if (noteEnd > measureEndBeat + 0.001) return
+    if (noteEnd <= cursor + 0.001 && noteStart < cursor - 0.001) return
+
+    output.push(note)
+    cursor = Math.max(cursor, noteEnd)
+  })
+
+  if (cursor < measureEndBeat - 0.001) {
+    output.push(...fillRenderRests(output[output.length - 1] ?? sorted[0], cursor, measureEndBeat, lane))
+  }
+
+  return output
+}
+
 function groupNotesByMeasure(notes: NoteEvent[]): NoteEvent[][] {
   const groups: NoteEvent[][] = []
   notes.forEach((note) => {
@@ -138,8 +230,7 @@ function isBeamable(note: NoteEvent): boolean {
 
 function makeAutoBeamKey(note: NoteEvent): string {
   const beatBucket = Math.floor(note.beat)
-  const subdivisionBucket = note.duration === '16th' ? Math.floor((note.beat - beatBucket) * 4) : 0
-  return `auto-${note.measure}-${beatBucket}-${note.duration === '16th' ? Math.floor(subdivisionBucket / 4) : 0}`
+  return `auto-${note.measure}-${beatBucket}`
 }
 
 function getBeatBucket(note: NoteEvent): number {
@@ -279,14 +370,17 @@ function createVexNotes(notes: NoteEvent[], lane: VoiceLane): StaveNote[] {
 function drawVoiceLane(context: any, stave: Stave, notes: NoteEvent[], timeSignature: TimeSignatureValue, staveWidth: number, lane: VoiceLane) {
   if (notes.length === 0) return
 
+  const renderNotes = normalizeVoiceMeasureForRender(notes, timeSignature, lane)
+  if (renderNotes.length === 0) return
+
   const voiceConfig = getVoiceConfig(timeSignature)
-  const vexNotes = createVexNotes(notes, lane)
+  const vexNotes = createVexNotes(renderNotes, lane)
   const voice = new Voice(voiceConfig)
   voice.setStrict(false)
   voice.addTickables(vexNotes)
 
-  const grouped = getSmartBeamsAndTuplets(vexNotes, notes)
-  new Formatter().joinVoices([voice]).format([voice], getFormatWidth(staveWidth, notes))
+  const grouped = getSmartBeamsAndTuplets(vexNotes, renderNotes)
+  new Formatter().joinVoices([voice]).format([voice], getFormatWidth(staveWidth, renderNotes))
   voice.draw(context, stave)
   grouped.beams.forEach((beam) => beam.setContext(context).draw())
   grouped.tuplets.forEach((tuplet) => tuplet.setContext(context).draw())
