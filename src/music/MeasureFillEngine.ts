@@ -24,14 +24,20 @@ export function getDurationBeats(duration: DurationValue): number {
   return 0.25
 }
 
+function quantizeBeat(value: number): number {
+  return Math.round(value * 12) / 12
+}
+
 function getLargestDurationThatFits(remainingBeats: number): DurationValue {
-  if (remainingBeats >= 4) return 'Whole'
-  if (remainingBeats >= 3) return 'DottedHalf'
-  if (remainingBeats >= 2) return 'Half'
-  if (remainingBeats >= 1.5) return 'DottedQuarter'
-  if (remainingBeats >= 1) return 'Quarter'
-  if (remainingBeats >= 0.75) return 'DottedEighth'
-  if (remainingBeats >= 0.5) return 'Eighth'
+  const safeRemaining = quantizeBeat(remainingBeats)
+
+  if (safeRemaining >= 4) return 'Whole'
+  if (safeRemaining >= 3) return 'DottedHalf'
+  if (safeRemaining >= 2) return 'Half'
+  if (safeRemaining >= 1.5) return 'DottedQuarter'
+  if (safeRemaining >= 1) return 'Quarter'
+  if (safeRemaining >= 0.75) return 'DottedEighth'
+  if (safeRemaining >= 0.5) return 'Eighth'
   return '16th'
 }
 
@@ -52,25 +58,32 @@ export function fillMeasureWithPattern(
   let patternIndex = patternOffset
 
   while (usedBeats < measureBeats && !isCloseEnough(usedBeats, measureBeats)) {
-    const remainingBeats = measureBeats - usedBeats
+    const quantizedUsedBeats = quantizeBeat(usedBeats)
+    const remainingBeats = quantizeBeat(measureBeats - quantizedUsedBeats)
+
     const requestedDuration = safePattern[patternIndex % safePattern.length]
-    const requestedBeats = getDurationBeats(requestedDuration)
+    const requestedBeats = quantizeBeat(getDurationBeats(requestedDuration))
+
     const duration = requestedBeats <= remainingBeats + 0.0001
       ? requestedDuration
       : getLargestDurationThatFits(remainingBeats)
-    const durationBeats = getDurationBeats(duration)
 
-    events.push({ duration, beat })
+    const durationBeats = quantizeBeat(getDurationBeats(duration))
 
-    beat += durationBeats
-    usedBeats += durationBeats
+    events.push({
+      duration,
+      beat: quantizeBeat(beat),
+    })
+
+    beat = quantizeBeat(beat + durationBeats)
+    usedBeats = quantizeBeat(usedBeats + durationBeats)
     patternIndex += 1
   }
 
   return {
     events,
     nextPatternOffset: patternIndex,
-    totalBeats: usedBeats,
+    totalBeats: quantizeBeat(usedBeats),
   }
 }
 
