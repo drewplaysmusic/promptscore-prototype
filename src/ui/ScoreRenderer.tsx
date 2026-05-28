@@ -375,11 +375,15 @@ function drawVoiceLane(context: any, stave: Stave, notes: NoteEvent[], timeSigna
 
   const voiceConfig = getVoiceConfig(timeSignature)
   const vexNotes = createVexNotes(renderNotes, lane)
+
+  // Important: construct tuplets before the voice consumes the tickables.
+  // VexFlow applies tuplet tick scaling to the notes during Tuplet construction.
+  const grouped = getSmartBeamsAndTuplets(vexNotes, renderNotes)
+
   const voice = new Voice(voiceConfig)
   voice.setStrict(false)
   voice.addTickables(vexNotes)
 
-  const grouped = getSmartBeamsAndTuplets(vexNotes, renderNotes)
   new Formatter().joinVoices([voice]).format([voice], getFormatWidth(staveWidth, renderNotes))
   voice.draw(context, stave)
   grouped.beams.forEach((beam) => beam.setContext(context).draw())
