@@ -25,8 +25,15 @@ type ScaleTone = {
   octave: number
 }
 
+type TupletMeta = {
+  id: string
+  numNotes: number
+  notesOccupied: number
+}
+
 type GeneratedNoteEvent = NoteEvent & {
   voiceType?: 'melody' | 'accompaniment' | 'bass' | 'percussion'
+  tuplet?: TupletMeta
   tupletGroupId?: string
   ratioLabel?: string
   beamGroupId?: string
@@ -180,6 +187,11 @@ function tagTripletGroups(events: GeneratedNoteEvent[]): GeneratedNoteEvent[] {
 
     return {
       ...event,
+      tuplet: {
+        id: groupId,
+        numNotes: 3,
+        notesOccupied: 2,
+      },
       tupletGroupId: groupId,
       beamGroupId: groupId,
       bracketGroupId: groupId,
@@ -344,7 +356,7 @@ export function generatePromptIntentScore(prompt: string, defaults: ComposerDefa
 
   const accompanimentNotes = createAccompanimentEvents(harmony, intent.keyRoot, intent.mode, intent.measureCount, timeSignature, prompt)
   const notes = tagTripletGroups([...accompanimentNotes, ...melodyNotes]).sort((a, b) => (a.measure - b.measure) || (a.beat - b.beat) || ((a.octave ?? 4) - (b.octave ?? 4)))
-  const tripletSummary = wantsTripletTexture(prompt) ? ' Triplet override: grouped repeated 3:2 eighth-note tuplets.' : ''
+  const tripletSummary = wantsTripletTexture(prompt) ? ' Triplet migration: generated structured 3:2 tuplet metadata while preserving playback compatibility.' : ''
   const sixteenthSummary = wantsSixteenthTexture(prompt) ? ' Sixteenth override: continuous sixteenth-note melody pattern.' : ''
 
   return {
