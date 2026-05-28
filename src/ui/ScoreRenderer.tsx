@@ -13,6 +13,7 @@ type KeySignatureValue =
 
 type ScoreCursorPosition = { measure: number; beat: number }
 type ChordPitch = { pitch: PitchValue; octave: number; accidental: AccidentalValue }
+type TupletMeta = { id: string; numNotes: number; notesOccupied: number }
 
 type NoteEvent = {
   duration: DurationValue
@@ -24,6 +25,7 @@ type NoteEvent = {
   measure: number
   beat: number
   voiceType?: 'melody' | 'accompaniment' | 'bass' | 'percussion'
+  tuplet?: TupletMeta
   tupletGroupId?: string
   ratioLabel?: string
   beamGroupId?: string
@@ -129,6 +131,14 @@ function getDurationBeats(duration: DurationValue): number {
   return 0.25
 }
 
+function getRenderDurationBeats(note: NoteEvent): number {
+  if (note.tuplet) {
+    const baseDuration = note.duration === 'TripletEighth' ? 'Eighth' : note.duration
+    return getDurationBeats(baseDuration) * (note.tuplet.notesOccupied / note.tuplet.numNotes)
+  }
+  return getDurationBeats(note.duration)
+}
+
 function isCloseEnough(a: number, b: number): boolean {
   return Math.abs(a - b) < 0.001
 }
@@ -180,7 +190,7 @@ function normalizeVoiceMeasureForRender(notes: NoteEvent[], timeSignature: TimeS
 
   sorted.forEach((note) => {
     const noteStart = Math.max(1, note.beat)
-    const durationBeats = getDurationBeats(note.duration)
+    const durationBeats = getRenderDurationBeats(note)
     const noteEnd = noteStart + durationBeats
 
     if (noteStart > cursor + 0.001) {
@@ -224,8 +234,12 @@ function hasAccompaniment(notes: NoteEvent[]): boolean {
   return notes.some((note) => inferLane(note) === 'accompaniment')
 }
 
+function isTupletNote(note: NoteEvent): boolean {
+  return Boolean(note.tuplet) || note.duration === 'TripletEighth'
+}
+
 function isBeamable(note: NoteEvent): boolean {
-  return !note.isRest && (note.duration === 'Eighth' || note.duration === '16th' || note.duration === 'TripletEighth')
+  return !note.isRest && (note.duration === 'Eighth' || note.duration === '16th' || isTupletNote(note))
 }
 
 function makeAutoBeamKey(note: NoteEvent): string {
@@ -238,18 +252,26 @@ function getBeatBucket(note: NoteEvent): number {
 }
 
 function getExplicitGroupId(note: NoteEvent): string {
-  return note.bracketGroupId || note.tupletGroupId || note.beamGroupId || ''
+  return note.tuplet?.id || note.bracketGroupId || note.tupletGroupId || note.beamGroupId || ''
 }
 
-function makeTripletGroupId(note: NoteEvent): string {
+function makeTupletGroupId(note: NoteEvent): string {
   const explicit = getExplicitGroupId(note)
   if (explicit) return explicit
-  return `triplet-${note.measure}-${getBeatBucket(note)}-${note.voiceType ?? 'voice'}`
+  return `tuplet-${note.measure}-${getBeatBucket(note)}-${note.voiceType ?? 'voice'}`
+}
+
+function getTupletMeta(note: NoteEvent): TupletMeta {
+  return note.tuplet ?? {
+    id: makeTupletGroupId(note),
+    numNotes: 3,
+    notesOccupied: 2,
+  }
 }
 
 function getDenseRhythmRatio(notes: NoteEvent[]): number {
   if (notes.length === 0) return 0
-  const dense = notes.filter((note) => note.duration === '16th' || note.duration === 'TripletEighth').length
+  const dense = notes.filter((note) => note.duration === '16th' || isTupletNote(note)).length
   return dense / notes.length
 }
 
@@ -289,7 +311,7 @@ function drawScoreCursor(context: any, x: number, y: number, staveWidth: number,
 function getSmartBeamsAndTuplets(vexNotes: StaveNote[], notes: NoteEvent[]): { beams: Beam[]; tuplets: Tuplet[] } {
   const beams: Beam[] = []
   const tuplets: Tuplet[] = []
-  const tripletGroups = new Map<string, StaveNote[]>()
+  const tupletGroups = new Map<string, { notes: StaveNote[]; meta: TupletMeta }>()
   const beamGroups = new Map<string, StaveNote[]>()
 
   notes.forEach((note, index) => {
@@ -297,11 +319,11 @@ function getSmartBeamsAndTuplets(vexNotes: StaveNote[], notes: NoteEvent[]): { b
     const vexNote = vexNotes[index]
     if (!vexNote) return
 
-    if (note.duration === 'TripletEighth') {
-      const tripletId = makeTripletGroupId(note)
-      const group = tripletGroups.get(tripletId) ?? []
-      group.push(vexNote)
-      tripletGroups.set(tripletId, group)
+    if (isTupletNote(note)) {
+      const meta = getTupletMeta(note)
+      const group = tupletGroups.get(meta.id) ?? { notes: [], meta }
+      group.notes.push(vexNote)
+      tupletGroups.set(meta.id, group)
       return
     }
 
@@ -312,15 +334,16 @@ function getSmartBeamsAndTuplets(vexNotes: StaveNote[], notes: NoteEvent[]): { b
     beamGroups.set(beatLocalId, group)
   })
 
-  tripletGroups.forEach((group) => {
-    for (let index = 0; index < group.length; index += 3) {
-      const slice = group.slice(index, index + 3)
+  tupletGroups.forEach((group) => {
+    const tupletSize = Math.max(2, group.meta.numNotes || 3)
+    for (let index = 0; index < group.notes.length; index += tupletSize) {
+      const slice = group.notes.slice(index, index + tupletSize)
       if (slice.length < 2) continue
       beams.push(new Beam(slice))
-      if (slice.length === 3) {
+      if (slice.length === tupletSize) {
         tuplets.push(new Tuplet(slice, {
-          num_notes: 3,
-          notes_occupied: 2,
+          num_notes: group.meta.numNotes,
+          notes_occupied: group.meta.notesOccupied,
         } as any))
       }
     }
