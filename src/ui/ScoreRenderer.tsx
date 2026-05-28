@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Accidental as VFAccidental, Beam, Dot, Formatter, Renderer, Stave, StaveConnector, StaveNote, Stem, Tuplet, Voice } from 'vexflow'
+import { Accidental as VFAccidental, Beam, Dot, Formatter, Renderer, Stave, StaveNote, Tuplet, Voice } from 'vexflow'
+import { createMeasureFrame, type MeasureFrame } from '../music/measureFrame'
 
 type DurationValue = 'Whole' | 'DottedHalf' | 'Half' | 'DottedQuarter' | 'Quarter' | 'DottedEighth' | 'Eighth' | '16th' | 'TripletEighth'
 type AccidentalValue = 'Sharp' | 'Flat' | 'Natural' | null
@@ -13,7 +14,6 @@ type KeySignatureValue =
 
 type ScoreCursorPosition = { measure: number; beat: number }
 type ChordPitch = { pitch: PitchValue; octave: number; accidental: AccidentalValue }
-type TupletMeta = { id: string; numNotes: number; notesOccupied: number }
 
 type NoteEvent = {
   duration: DurationValue
@@ -24,16 +24,11 @@ type NoteEvent = {
   chordPitches?: ChordPitch[]
   measure: number
   beat: number
-  voiceType?: 'melody' | 'accompaniment' | 'bass' | 'percussion'
-  tuplet?: TupletMeta
   tupletGroupId?: string
   ratioLabel?: string
   beamGroupId?: string
   bracketGroupId?: string
 }
-
-type VoiceLane = 'melody' | 'accompaniment'
-type RhythmStaffLineCount = 1 | 2 | 3 | 4 | 5
 
 function isDottedDuration(duration: DurationValue): boolean {
   return duration === 'DottedHalf' || duration === 'DottedQuarter' || duration === 'DottedEighth'
@@ -46,28 +41,6 @@ function getUndottedDuration(duration: DurationValue): DurationValue {
   return duration
 }
 
-function getRhythmLabMetadata(lineCount: RhythmStaffLineCount) {
-  return {
-    notationScale: lineCount === 1 ? 1.35 : 1.18,
-    spacingMultiplier: lineCount === 1 ? 1.45 : 1.18,
-    lineSpacing: lineCount === 1 ? 18 : 12,
-    percussionMode: lineCount === 1,
-  }
-}
-
-function getEducationalPitchConstraint(pitch: PitchValue, lineCount: RhythmStaffLineCount): PitchValue {
-  const visible: PitchValue[] = ['E', 'G', 'B', 'D', 'F'].slice(0, lineCount) as PitchValue[]
-  return visible.includes(pitch) ? pitch : visible[0]
-}
-
-function normalizeRhythmLabNotes(notes: NoteEvent[], lineCount: RhythmStaffLineCount): NoteEvent[] {
-  return notes.map((note) => ({
-    ...note,
-    pitch: getEducationalPitchConstraint(note.pitch, lineCount),
-    octave: 4,
-  }))
-}
-
 function getVexDuration(duration: DurationValue, isRest: boolean): string {
   const suffix = isRest ? 'r' : ''
   const base = getUndottedDuration(duration)
@@ -76,6 +49,18 @@ function getVexDuration(duration: DurationValue, isRest: boolean): string {
   if (base === 'Quarter') return `q${suffix}`
   if (base === 'Eighth' || base === 'TripletEighth') return `8${suffix}`
   return `16${suffix}`
+}
+
+function getDurationBeats(duration: DurationValue): number {
+  if (duration === 'Whole') return 4
+  if (duration === 'DottedHalf') return 3
+  if (duration === 'Half') return 2
+  if (duration === 'DottedQuarter') return 1.5
+  if (duration === 'Quarter') return 1
+  if (duration === 'DottedEighth') return 0.75
+  if (duration === 'Eighth') return 0.5
+  if (duration === 'TripletEighth') return 1 / 3
+  return 0.25
 }
 
 function getVexAccidental(accidental: AccidentalValue): string | null {
@@ -105,13 +90,6 @@ function getVexKeySignature(keySignature: KeySignatureValue): string {
   return keyMap[keySignature] || 'C'
 }
 
-function getVoiceConfig(timeSignature: TimeSignatureValue): { num_beats: number; beat_value: number } {
-  if (timeSignature === '3/4') return { num_beats: 3, beat_value: 4 }
-  if (timeSignature === '2/4') return { num_beats: 2, beat_value: 4 }
-  if (timeSignature === '6/8') return { num_beats: 6, beat_value: 8 }
-  return { num_beats: 4, beat_value: 4 }
-}
-
 function getMeasureBeats(timeSignature: TimeSignatureValue): number {
   if (timeSignature === '3/4') return 3
   if (timeSignature === '2/4') return 2
@@ -119,97 +97,106 @@ function getMeasureBeats(timeSignature: TimeSignatureValue): number {
   return 4
 }
 
-function getDurationBeats(duration: DurationValue): number {
-  if (duration === 'Whole') return 4
-  if (duration === 'DottedHalf') return 3
-  if (duration === 'Half') return 2
-  if (duration === 'DottedQuarter') return 1.5
-  if (duration === 'Quarter') return 1
-  if (duration === 'DottedEighth') return 0.75
-  if (duration === 'Eighth') return 0.5
-  if (duration === 'TripletEighth') return 1 / 3
-  return 0.25
+function getVoiceConfig(timeSignature: TimeSignatureValue): { num_beats: number; beat_value: number } {
+  if (timeSignature === '3/4') return { num_beats: 3, beat_value: 4 }
+  if (timeSignature === '2/4') return { num_beats: 2, beat_value: 4 }
+  if (timeSignature === '6/8') return { num_beats: 6, beat_value: 8 }
+  return { num_beats: 4, beat_value: 4 }
 }
 
-function getRenderDurationBeats(note: NoteEvent): number {
-  if (note.tuplet) {
-    const baseDuration = note.duration === 'TripletEighth' ? 'Eighth' : note.duration
-    return getDurationBeats(baseDuration) * (note.tuplet.notesOccupied / note.tuplet.numNotes)
+function getPulseCountForGrid(timeSignature: TimeSignatureValue): number {
+  if (timeSignature === '6/8') return 2
+  return getMeasureBeats(timeSignature)
+}
+
+function getSubdivisionCountForGrid(timeSignature: TimeSignatureValue): number {
+  if (timeSignature === '6/8') return 3
+  return 4
+}
+
+function drawPulseGridOverlay(context: any, y: number, timeSignature: TimeSignatureValue, measureIndex: number, measureFrame: MeasureFrame) {
+  if (!context || typeof context.beginPath !== 'function') return
+  const pulseCount = getPulseCountForGrid(timeSignature)
+  const subdivisionCount = getSubdivisionCountForGrid(timeSignature)
+  const gridLeft = measureFrame.rhythmStartX
+  const gridRight = measureFrame.rhythmEndX
+  const gridWidth = measureFrame.rhythmWidth
+  const gridTop = y + 8
+  const gridBottom = y + 88
+  const pulseWidth = gridWidth / pulseCount
+
+  context.save()
+  context.setStrokeStyle('#e5e7eb')
+  context.setLineWidth(1)
+  context.beginPath()
+  context.moveTo(gridLeft, gridTop)
+  context.lineTo(gridRight, gridTop)
+  context.moveTo(gridLeft, gridBottom)
+  context.lineTo(gridRight, gridBottom)
+  context.stroke()
+
+  for (let pulse = 0; pulse <= pulseCount; pulse += 1) {
+    const pulseX = gridLeft + pulse * pulseWidth
+    context.setStrokeStyle(pulse === 0 || pulse === pulseCount ? '#cbd5e1' : '#d1d5db')
+    context.setLineWidth(pulse === 0 || pulse === pulseCount ? 1.2 : 1)
+    context.beginPath()
+    context.moveTo(pulseX, gridTop)
+    context.lineTo(pulseX, gridBottom)
+    context.stroke()
+    if (pulse < pulseCount) {
+      context.setFont('Arial', 9, 'normal')
+      context.setFillStyle('#94a3b8')
+      context.fillText(`${measureIndex + 1}.${pulse + 1}`, pulseX + 4, gridTop - 3)
+      for (let subdivision = 1; subdivision < subdivisionCount; subdivision += 1) {
+        const subdivisionX = pulseX + (pulseWidth * subdivision) / subdivisionCount
+        context.setStrokeStyle('#eef2f7')
+        context.beginPath()
+        context.moveTo(subdivisionX, gridTop + 12)
+        context.lineTo(subdivisionX, gridBottom - 12)
+        context.stroke()
+      }
+    }
   }
-  return getDurationBeats(note.duration)
+  context.restore()
 }
 
-function isCloseEnough(a: number, b: number): boolean {
-  return Math.abs(a - b) < 0.001
+function drawScoreCursor(context: any, y: number, timeSignature: TimeSignatureValue, measureIndex: number, measureFrame: MeasureFrame, cursorPosition?: ScoreCursorPosition) {
+  if (!context || !cursorPosition) return
+  if (cursorPosition.measure !== measureIndex + 1) return
+  const pulseCount = getPulseCountForGrid(timeSignature)
+  const beatRatio = Math.max(0, Math.min(1, (cursorPosition.beat - 1) / pulseCount))
+  const cursorX = measureFrame.rhythmStartX + beatRatio * measureFrame.rhythmWidth
+  context.save()
+  context.setStrokeStyle('#111827')
+  context.setLineWidth(2)
+  context.beginPath()
+  context.moveTo(cursorX, y + 4)
+  context.lineTo(cursorX, y + 94)
+  context.stroke()
+  context.restore()
 }
 
-function getLargestPlainDurationThatFits(beats: number): DurationValue {
-  if (beats >= 4 || isCloseEnough(beats, 4)) return 'Whole'
-  if (beats >= 3 || isCloseEnough(beats, 3)) return 'DottedHalf'
-  if (beats >= 2 || isCloseEnough(beats, 2)) return 'Half'
-  if (beats >= 1.5 || isCloseEnough(beats, 1.5)) return 'DottedQuarter'
-  if (beats >= 1 || isCloseEnough(beats, 1)) return 'Quarter'
-  if (beats >= 0.75 || isCloseEnough(beats, 0.75)) return 'DottedEighth'
-  if (beats >= 0.5 || isCloseEnough(beats, 0.5)) return 'Eighth'
+function getLargestRestDuration(remainingBeats: number): DurationValue {
+  if (remainingBeats >= 4) return 'Whole'
+  if (remainingBeats >= 3) return 'DottedHalf'
+  if (remainingBeats >= 2) return 'Half'
+  if (remainingBeats >= 1.5) return 'DottedQuarter'
+  if (remainingBeats >= 1) return 'Quarter'
+  if (remainingBeats >= 0.75) return 'DottedEighth'
+  if (remainingBeats >= 0.5) return 'Eighth'
   return '16th'
 }
 
-function makeRenderRest(base: NoteEvent, duration: DurationValue, beat: number, lane: VoiceLane): NoteEvent {
-  return {
-    duration,
-    accidental: null,
-    isRest: true,
-    pitch: lane === 'accompaniment' ? 'D' : 'B',
-    octave: lane === 'accompaniment' ? 3 : 4,
-    measure: base.measure,
-    beat,
-    voiceType: lane,
+function getPaddingRests(measureNotes: NoteEvent[], timeSignature: TimeSignatureValue): NoteEvent[] {
+  const usedBeats = measureNotes.reduce((total, note) => total + getDurationBeats(note.duration), 0)
+  let remainingBeats = Math.max(0, getMeasureBeats(timeSignature) - usedBeats)
+  const padding: NoteEvent[] = []
+  while (remainingBeats > 0.001) {
+    const duration = getLargestRestDuration(remainingBeats)
+    padding.push({ duration, accidental: null, isRest: true, pitch: 'B', octave: 4, measure: 0, beat: 0 })
+    remainingBeats -= getDurationBeats(duration)
   }
-}
-
-function fillRenderRests(base: NoteEvent, startBeat: number, endBeat: number, lane: VoiceLane): NoteEvent[] {
-  const rests: NoteEvent[] = []
-  let cursor = startBeat
-  while (cursor < endBeat && !isCloseEnough(cursor, endBeat)) {
-    const remaining = endBeat - cursor
-    const duration = getLargestPlainDurationThatFits(remaining)
-    const durationBeats = getDurationBeats(duration)
-    if (durationBeats <= 0) break
-    rests.push(makeRenderRest(base, duration, cursor, lane))
-    cursor += durationBeats
-  }
-  return rests
-}
-
-function normalizeVoiceMeasureForRender(notes: NoteEvent[], timeSignature: TimeSignatureValue, lane: VoiceLane): NoteEvent[] {
-  if (notes.length === 0) return []
-  const measureEndBeat = getMeasureBeats(timeSignature) + 1
-  const sorted = [...notes].sort((a, b) => a.beat - b.beat)
-  const output: NoteEvent[] = []
-  let cursor = 1
-
-  sorted.forEach((note) => {
-    const noteStart = Math.max(1, note.beat)
-    const durationBeats = getRenderDurationBeats(note)
-    const noteEnd = noteStart + durationBeats
-
-    if (noteStart > cursor + 0.001) {
-      output.push(...fillRenderRests(note, cursor, Math.min(noteStart, measureEndBeat), lane))
-      cursor = noteStart
-    }
-
-    if (noteEnd > measureEndBeat + 0.001) return
-    if (noteEnd <= cursor + 0.001 && noteStart < cursor - 0.001) return
-
-    output.push(note)
-    cursor = Math.max(cursor, noteEnd)
-  })
-
-  if (cursor < measureEndBeat - 0.001) {
-    output.push(...fillRenderRests(output[output.length - 1] ?? sorted[0], cursor, measureEndBeat, lane))
-  }
-
-  return output
+  return padding
 }
 
 function groupNotesByMeasure(notes: NoteEvent[]): NoteEvent[][] {
@@ -222,293 +209,154 @@ function groupNotesByMeasure(notes: NoteEvent[]): NoteEvent[][] {
   return groups.filter(Boolean)
 }
 
-function inferLane(note: NoteEvent): VoiceLane {
-  if (note.voiceType === 'accompaniment' || note.voiceType === 'bass') return 'accompaniment'
-  const octave = note.octave ?? 4
-  if (note.chordPitches && note.chordPitches.length > 1) return 'accompaniment'
-  if (octave < 5) return 'accompaniment'
-  return 'melody'
-}
-
-function hasAccompaniment(notes: NoteEvent[]): boolean {
-  return notes.some((note) => inferLane(note) === 'accompaniment')
-}
-
-function isTupletNote(note: NoteEvent): boolean {
-  return Boolean(note.tuplet) || note.duration === 'TripletEighth'
-}
-
 function isBeamable(note: NoteEvent): boolean {
-  return !note.isRest && (note.duration === 'Eighth' || note.duration === '16th' || isTupletNote(note))
-}
-
-function makeAutoBeamKey(note: NoteEvent): string {
-  const beatBucket = Math.floor(note.beat)
-  return `auto-${note.measure}-${beatBucket}`
-}
-
-function getBeatBucket(note: NoteEvent): number {
-  return Math.floor(note.beat)
-}
-
-function getExplicitGroupId(note: NoteEvent): string {
-  return note.tuplet?.id || note.bracketGroupId || note.tupletGroupId || note.beamGroupId || ''
-}
-
-function makeTupletGroupId(note: NoteEvent): string {
-  const explicit = getExplicitGroupId(note)
-  if (explicit) return explicit
-  return `tuplet-${note.measure}-${getBeatBucket(note)}-${note.voiceType ?? 'voice'}`
-}
-
-function getTupletMeta(note: NoteEvent): TupletMeta {
-  return note.tuplet ?? {
-    id: makeTupletGroupId(note),
-    numNotes: 3,
-    notesOccupied: 2,
-  }
-}
-
-function getDenseRhythmRatio(notes: NoteEvent[]): number {
-  if (notes.length === 0) return 0
-  const dense = notes.filter((note) => note.duration === '16th' || isTupletNote(note)).length
-  return dense / notes.length
-}
-
-function getFormatWidth(baseWidth: number, notes: NoteEvent[]): number {
-  const denseRatio = getDenseRhythmRatio(notes)
-  const denseBonus = denseRatio > 0.7 ? 72 : denseRatio > 0.35 ? 42 : 0
-  const noteCountBonus = Math.max(0, notes.length - 8) * 8
-  return Math.max(180, baseWidth - 92 + denseBonus + noteCountBonus)
-}
-
-function drawText(context: any, text: string, x: number, y: number) {
-  context.save()
-  context.setFont('Arial', 10, 'bold')
-  context.setFillStyle('#71717a')
-  context.fillText(text, x, y)
-  context.restore()
-}
-
-function drawScoreCursor(context: any, x: number, y: number, staveWidth: number, cursorPosition: ScoreCursorPosition | undefined, measureIndex: number, timeSignature: TimeSignatureValue, height = 92) {
-  if (!cursorPosition) return
-  if (cursorPosition.measure !== measureIndex + 1) return
-
-  const beatCount = timeSignature === '6/8' ? 3 : Number(timeSignature.split('/')[0] || 4)
-  const beatRatio = Math.max(0, Math.min(1, (cursorPosition.beat - 1) / beatCount))
-  const cursorX = x + 26 + beatRatio * Math.max(1, staveWidth - 64)
-
-  context.save()
-  context.setStrokeStyle('#ef4444')
-  context.setLineWidth(2)
-  context.beginPath()
-  context.moveTo(cursorX, y + 4)
-  context.lineTo(cursorX, y + height)
-  context.stroke()
-  context.restore()
+  return !note.isRest && (note.duration === 'Eighth' || note.duration === '16th' || note.duration === 'TripletEighth')
 }
 
 function getSmartBeamsAndTuplets(vexNotes: StaveNote[], notes: NoteEvent[]): { beams: Beam[]; tuplets: Tuplet[] } {
   const beams: Beam[] = []
   const tuplets: Tuplet[] = []
-  const tupletGroups = new Map<string, { notes: StaveNote[]; meta: TupletMeta }>()
-  const beamGroups = new Map<string, StaveNote[]>()
+
+  // Step 1: Auto-detect consecutive TripletEighth notes and group them in threes
+  let tripletRun: number[] = []
+
+  function flushTripletRun() {
+    while (tripletRun.length >= 3) {
+      const groupIndices = tripletRun.splice(0, 3)
+      const groupNotes = groupIndices.map((i) => vexNotes[i])
+      beams.push(new Beam(groupNotes))
+      tuplets.push(new Tuplet(groupNotes, { num_notes: 3, notes_occupied: 2 } as any))
+    }
+    tripletRun = []
+  }
 
   notes.forEach((note, index) => {
-    if (!isBeamable(note)) return
-    const vexNote = vexNotes[index]
-    if (!vexNote) return
-
-    if (isTupletNote(note)) {
-      const meta = getTupletMeta(note)
-      const group = tupletGroups.get(meta.id) ?? { notes: [], meta }
-      group.notes.push(vexNote)
-      tupletGroups.set(meta.id, group)
-      return
-    }
-
-    const explicitId = getExplicitGroupId(note)
-    const beatLocalId = explicitId ? `${explicitId}-${getBeatBucket(note)}` : makeAutoBeamKey(note)
-    const group = beamGroups.get(beatLocalId) ?? []
-    group.push(vexNote)
-    beamGroups.set(beatLocalId, group)
-  })
-
-  tupletGroups.forEach((group) => {
-    const tupletSize = Math.max(2, group.meta.numNotes || 3)
-    for (let index = 0; index < group.notes.length; index += tupletSize) {
-      const slice = group.notes.slice(index, index + tupletSize)
-      if (slice.length < 2) continue
-      beams.push(new Beam(slice))
-      if (slice.length === tupletSize) {
-        tuplets.push(new Tuplet(slice, {
-          num_notes: group.meta.numNotes,
-          notes_occupied: group.meta.notesOccupied,
-        } as any))
-      }
+    if (!note.isRest && note.duration === 'TripletEighth') {
+      tripletRun.push(index)
+    } else {
+      flushTripletRun()
     }
   })
+  flushTripletRun()
 
-  beamGroups.forEach((group) => {
-    if (group.length < 2) return
-    beams.push(new Beam(group))
+  // Step 2: Handle explicitly grouped notes (bracket/tuplet IDs) that aren't triplet eighths
+  const alreadyGrouped = new Set<number>()
+  tuplets.forEach(() => {}) // tuplets already created above
+  // Mark triplet-grouped indices
+  notes.forEach((note, index) => {
+    if (!note.isRest && note.duration === 'TripletEighth') alreadyGrouped.add(index)
+  })
+
+  const groups = new Map<string, number[]>()
+  notes.forEach((note, index) => {
+    if (alreadyGrouped.has(index)) return
+    const id = note.bracketGroupId || note.tupletGroupId || note.ratioLabel || ''
+    if (!id || note.isRest) return
+    const group = groups.get(id) ?? []
+    group.push(index)
+    groups.set(id, group)
+  })
+
+  groups.forEach((groupIndices, id) => {
+    if (groupIndices.length < 2) return
+    const groupNotes = groupIndices.map((i) => vexNotes[i])
+    beams.push(new Beam(groupNotes))
+
+    const numberMatch = id.match(/\d+/)
+    const tupletNumber = numberMatch ? Number(numberMatch[0]) : groupNotes.length
+    if (tupletNumber >= 3) {
+      tuplets.push(new Tuplet(groupNotes, {
+        num_notes: tupletNumber,
+        notes_occupied: tupletNumber === 3 ? 2 : tupletNumber - 1,
+      } as any))
+    }
   })
 
   return { beams, tuplets }
 }
 
-function getStemDirection(lane: VoiceLane): number {
-  return lane === 'melody' ? Stem.UP : Stem.DOWN
-}
-
-function createVexNotes(notes: NoteEvent[], lane: VoiceLane): StaveNote[] {
-  const stemDirection = getStemDirection(lane)
-
-  return notes.map((note) => {
-    const vexNote = new StaveNote({
-      keys: getVexKeys(note),
-      duration: getVexDuration(note.duration, note.isRest),
-      stem_direction: stemDirection,
-    } as any)
-
-    if (typeof (vexNote as any).setStemDirection === 'function') {
-      ;(vexNote as any).setStemDirection(stemDirection)
-    }
-
-    if (!note.isRest && note.chordPitches && note.chordPitches.length > 0) {
-      note.chordPitches.forEach((pitch, index) => {
-        const accidental = getVexAccidental(pitch.accidental)
-        if (accidental) vexNote.addModifier(new VFAccidental(accidental), index)
-      })
-    } else {
-      const accidental = getVexAccidental(note.accidental)
-      if (accidental && !note.isRest) vexNote.addModifier(new VFAccidental(accidental), 0)
-    }
-
-    if (isDottedDuration(note.duration)) Dot.buildAndAttach([vexNote])
-    return vexNote
-  })
-}
-
-function drawVoiceLane(context: any, stave: Stave, notes: NoteEvent[], timeSignature: TimeSignatureValue, staveWidth: number, lane: VoiceLane) {
-  if (notes.length === 0) return
-
-  const renderNotes = normalizeVoiceMeasureForRender(notes, timeSignature, lane)
-  if (renderNotes.length === 0) return
-
-  const voiceConfig = getVoiceConfig(timeSignature)
-  const vexNotes = createVexNotes(renderNotes, lane)
-
-  // Important: construct tuplets before the voice consumes the tickables.
-  // VexFlow applies tuplet tick scaling to the notes during Tuplet construction.
-  const grouped = getSmartBeamsAndTuplets(vexNotes, renderNotes)
-
-  const voice = new Voice(voiceConfig)
-  voice.setStrict(false)
-  voice.addTickables(vexNotes)
-
-  new Formatter().joinVoices([voice]).format([voice], getFormatWidth(staveWidth, renderNotes))
-  voice.draw(context, stave)
-  grouped.beams.forEach((beam) => beam.setContext(context).draw())
-  grouped.tuplets.forEach((tuplet) => tuplet.setContext(context).draw())
-}
-
-export default function ScoreRenderer({ notes, timeSignature, keySignature, harmonyProgression = [], showHarmonyOverlay = false, showGrandStaff = false, cursorPosition, showRhythmStaff = false, rhythmStaffLineCount = 1 }: {
+export default function ScoreRenderer({ notes, timeSignature, keySignature, harmonyProgression = [], showHarmonyOverlay = false, cursorPosition }: {
   notes: NoteEvent[]
   timeSignature: TimeSignatureValue
   keySignature: KeySignatureValue
   harmonyProgression?: string[]
   showHarmonyOverlay?: boolean
-  showGrandStaff?: boolean
   cursorPosition?: ScoreCursorPosition
-  showRhythmStaff?: boolean
-  rhythmStaffLineCount?: RhythmStaffLineCount
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [zoom, setZoom] = useState(1)
-  const harmonyLabels = harmonyProgression || []
-  const accompanimentVisible = !showRhythmStaff && showGrandStaff && hasAccompaniment(notes)
-  const normalizedNotes = showRhythmStaff ? normalizeRhythmLabNotes(notes, rhythmStaffLineCount) : notes
-  const rhythmMetadata = getRhythmLabMetadata(rhythmStaffLineCount)
 
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
     container.innerHTML = ''
-    if (normalizedNotes.length === 0) return
+    if (notes.length === 0) return
 
-    const measureGroups = groupNotesByMeasure(normalizedNotes)
+    const measureGroups = groupNotesByMeasure(notes)
     const renderer = new Renderer(container, Renderer.Backends.SVG)
-    const systemHeight = accompanimentVisible ? 212 : showRhythmStaff ? 154 : 132
-    const rendererHeight = Math.max(760, 120 + Math.ceil(measureGroups.length / 3) * systemHeight)
-    renderer.resize(1180, rendererHeight)
+    renderer.resize(1180, 1200)
     const context = renderer.getContext()
+    const voiceConfig = getVoiceConfig(timeSignature)
 
     measureGroups.forEach((measureNotes, measureIndex) => {
       const systemIndex = Math.floor(measureIndex / 3)
       const measureInSystem = measureIndex % 3
-      const denseRatio = getDenseRhythmRatio(measureNotes)
-      const measureSlotWidth = denseRatio > 0.5 ? 392 : 372
-      const y = 64 + systemIndex * systemHeight
-      const x = 36 + measureInSystem * measureSlotWidth
-      const staveWidth = showRhythmStaff ? 428 : denseRatio > 0.5 ? 392 : 372
-      const melodyNotes = measureNotes.filter((note) => inferLane(note) === 'melody')
-      const accompanimentNotes = measureNotes.filter((note) => inferLane(note) === 'accompaniment')
-      const topStave = new Stave(x, y, staveWidth)
-
-      if (showRhythmStaff) {
-        topStave.setConfigForLines(Array.from({ length: rhythmStaffLineCount }, () => ({ visible: true })))
-      }
-
-      if (!showRhythmStaff && measureInSystem === 0) topStave.addClef('treble')
+      const y = 64 + systemIndex * 132
+      const x = 36 + measureInSystem * 372
+      const staveWidth = 372
+      const isFirstMeasureOfSystem = measureInSystem === 0
+      const stave = new Stave(x, y, staveWidth)
+      if (isFirstMeasureOfSystem) stave.addClef('treble')
       if (measureIndex === 0) {
-        topStave.addKeySignature(getVexKeySignature(keySignature))
-        topStave.addTimeSignature(timeSignature)
+        stave.addKeySignature(getVexKeySignature(keySignature))
+        stave.addTimeSignature(timeSignature)
+      }
+      stave.setContext(context)
+      const measureFrame = createMeasureFrame({ stave, measureIndex, isFirstMeasureOfSystem, x, staveWidth })
+      drawPulseGridOverlay(context as any, y, timeSignature, measureIndex, measureFrame)
+      stave.draw()
+
+      if (showHarmonyOverlay && harmonyProgression.length > 0) {
+        context.save()
+        context.setFont('Arial', 15, 'bold')
+        context.fillText(harmonyProgression[measureIndex % harmonyProgression.length], x + 18, y - 12)
+        context.restore()
       }
 
-      topStave.setContext(context)
-      topStave.draw()
-
-      if (measureInSystem === 0 && accompanimentVisible) drawText(context, 'Melody up', x - 6, y + 28)
-      if (showRhythmStaff && measureInSystem === 0) drawText(context, `RhythmLab · ${rhythmStaffLineCount} line${rhythmStaffLineCount > 1 ? 's' : ''} · E anchor`, x - 2, y - 12)
-
-      drawVoiceLane(context, topStave, accompanimentVisible ? melodyNotes : measureNotes, timeSignature, staveWidth * rhythmMetadata.spacingMultiplier, 'melody')
-
-      if (accompanimentVisible) {
-        const lowerStave = new Stave(x, y + 82, staveWidth)
-        if (measureInSystem === 0) lowerStave.addClef('bass')
-        if (measureIndex === 0) {
-          lowerStave.addKeySignature(getVexKeySignature(keySignature))
-          lowerStave.addTimeSignature(timeSignature)
+      const measureWithPadding = [...measureNotes, ...getPaddingRests(measureNotes, timeSignature)]
+      const vexNotes = measureWithPadding.map((note) => {
+        const vexNote = new StaveNote({ keys: getVexKeys(note), duration: getVexDuration(note.duration, note.isRest) })
+        if (!note.isRest && note.chordPitches && note.chordPitches.length > 0) {
+          note.chordPitches.forEach((pitch, index) => {
+            const accidental = getVexAccidental(pitch.accidental)
+            if (accidental) vexNote.addModifier(new VFAccidental(accidental), index)
+          })
+        } else {
+          const accidental = getVexAccidental(note.accidental)
+          if (!note.isRest && accidental) vexNote.addModifier(new VFAccidental(accidental), 0)
         }
-        lowerStave.setContext(context)
-        lowerStave.draw()
-        if (measureInSystem === 0) drawText(context, 'Accomp. down', x - 6, y + 110)
-        drawVoiceLane(context, lowerStave, accompanimentNotes, timeSignature, staveWidth, 'accompaniment')
+        if (isDottedDuration(note.duration)) Dot.buildAndAttach([vexNote])
+        return vexNote
+      })
 
-        if (measureInSystem === 0) {
-          const brace = new StaveConnector(topStave, lowerStave)
-          brace.setType(StaveConnector.type.BRACE)
-          brace.setContext(context).draw()
-        }
-        const singleLeft = new StaveConnector(topStave, lowerStave)
-        singleLeft.setType(StaveConnector.type.SINGLE_LEFT)
-        singleLeft.setContext(context).draw()
-      }
-
-      drawScoreCursor(context as any, x, y, staveWidth, cursorPosition, measureIndex, timeSignature, accompanimentVisible ? 174 : 92)
+      const voice = new Voice(voiceConfig)
+      voice.setStrict(false)
+      voice.addTickables(vexNotes)
+      const grouped = getSmartBeamsAndTuplets(vexNotes, measureWithPadding)
+      const beams = grouped.beams
+      const tuplets = grouped.tuplets
+      new Formatter().joinVoices([voice]).format([voice], staveWidth - 92)
+      voice.draw(context, stave)
+      beams.forEach((beam) => beam.setContext(context).draw())
+      tuplets.forEach((tuplet) => tuplet.setContext(context).draw())
+      drawScoreCursor(context as any, y, timeSignature, measureIndex, measureFrame, cursorPosition)
     })
-  }, [normalizedNotes, timeSignature, keySignature, cursorPosition, accompanimentVisible, showRhythmStaff, rhythmStaffLineCount])
+  }, [notes, timeSignature, keySignature, harmonyProgression, showHarmonyOverlay, cursorPosition])
 
   return (
     <div style={{ marginTop: 16, width: '100%', border: '1px solid #d4d4d8', borderRadius: 14, background: '#f8fafc', overflow: 'hidden' }}>
       <div style={{ height: 38, borderBottom: '1px solid #d4d4d8', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px' }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: '#71717a', textTransform: 'uppercase' }}>
-          {showRhythmStaff
-            ? `RhythmLab · ${rhythmStaffLineCount} Line Educational Staff · E Progression`
-            : `Score Timeline · ${accompanimentVisible ? 'Voice-Aware Grand Staff' : 'PulseGrid'} · ${keySignature}${showHarmonyOverlay ? ' · Harmony Overlay' : ''}`}
-        </div>
-
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#71717a', textTransform: 'uppercase' }}>Score Timeline · PulseGrid · {keySignature}{showHarmonyOverlay ? ' · Harmony Overlay' : ''}</div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button type="button" onClick={() => setZoom((z) => Math.max(0.75, z - 0.1))}>−</button>
           <span style={{ fontSize: 13 }}>{Math.round(zoom * 100)}%</span>
@@ -516,26 +364,9 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
           <button type="button" onClick={() => setZoom(1)}>Fit</button>
         </div>
       </div>
-
       <div style={{ minHeight: 500, maxHeight: 900, overflow: 'auto', padding: 0, background: 'linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%)' }}>
-        <div style={{ width: 1180, minHeight: 760, background: 'transparent', boxShadow: 'none', transform: `scale(${zoom * rhythmMetadata.notationScale})`, transformOrigin: 'top left', padding: '6px 8px 24px' }}>
-          {showHarmonyOverlay && harmonyLabels.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 372px)', rowGap: accompanimentVisible ? 182 : 102, padding: '12px 36px 0', fontSize: 18, fontWeight: 800, color: '#111827', pointerEvents: 'none' }}>
-              {Array.from({ length: Math.max(1, ...normalizedNotes.map((note) => note.measure), harmonyLabels.length) }).map((_, index) => (
-                <div key={`harmony-${index}`} style={{ paddingLeft: index % 3 === 0 ? 88 : 22 }}>
-                  {harmonyLabels[index % harmonyLabels.length]}
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          {normalizedNotes.length === 0 ? (
-            <div style={{ color: '#71717a', textAlign: 'center', paddingTop: 120 }}>
-              Add notes to render the score timeline.
-            </div>
-          ) : (
-            <div ref={containerRef} />
-          )}
+        <div style={{ width: 1180, minHeight: 760, background: 'transparent', boxShadow: 'none', transform: `scale(${zoom})`, transformOrigin: 'top left', padding: '6px 8px 24px' }}>
+          {notes.length === 0 ? <div style={{ color: '#71717a', textAlign: 'center', paddingTop: 120 }}>Add notes to render the score timeline.</div> : <div ref={containerRef} />}
         </div>
       </div>
     </div>
