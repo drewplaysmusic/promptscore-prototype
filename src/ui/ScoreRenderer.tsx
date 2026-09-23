@@ -272,6 +272,34 @@ function getSmartBeamsAndTuplets(vexNotes: StaveNote[], notes: NoteEvent[]): { b
     }
   })
 
+  // Step 3: Beam ordinary eighth/16th-note runs by musical beat.
+  // In simple meters (2/4, 3/4, 4/4), eighths beam within each quarter-note beat.
+  // In 6/8, they beam in two dotted-quarter groups (1-2-3 / 4-5-6).
+  const unavailable = new Set<number>(alreadyGrouped)
+  groups.forEach((indices) => indices.forEach((i) => unavailable.add(i)))
+
+  let run: number[] = []
+  let runBucket: number | null = null
+  function flushRun() {
+    if (run.length >= 2) beams.push(new Beam(run.map((i) => vexNotes[i])))
+    run = []
+    runBucket = null
+  }
+
+  let beatPosition = 0
+  notes.forEach((note, index) => {
+    const duration = getDurationBeats(note.duration)
+    const bucket = Math.floor(beatPosition / 1 + 1e-6)
+    const canBeam = isBeamable(note) && !unavailable.has(index)
+    if (!canBeam || (runBucket !== null && bucket !== runBucket)) flushRun()
+    if (canBeam) {
+      if (runBucket === null) runBucket = bucket
+      run.push(index)
+    }
+    beatPosition += duration
+  })
+  flushRun()
+
   return { beams, tuplets }
 }
 
