@@ -51,7 +51,10 @@ export function parseMusicIntent(raw:string): MusicIntent {
   const direction = /descending|down(?:ward)?/i.test(text) ? 'descending' : /both|up\s+and\s+down|ascending\s+and\s+descending/i.test(text) ? 'both' : 'ascending'
   const octaveMatch = text.match(/\b(one|two|three|1|2|3)\s+octaves?\b/i)
   const octaves = octaveMatch ? ({one:1,two:2,three:3}[octaveMatch[1].toLowerCase()] ?? Number(octaveMatch[1])) : 1
-  const meter = text.match(/\b(\d+)\s*\/\s*(\d+)\b/)?.slice(1,3).join('/') ?? '4/4'
+  // Time signatures must look like actual meters. This prevents harmonic
+  // slash functions such as V/V, 5/5, V/ii, and 5/2 from being read as meter.
+  const meterMatch = text.match(/(?:^|\s)(2|3|4|5|6|7|9|12)\s*\/\s*(2|4|8|16)(?=\s|$)/)
+  const meter = meterMatch ? `${meterMatch[1]}/${meterMatch[2]}` : '4/4'
   const measureMatch = text.match(/\b(\d+)\s+measures?\b/i)
   const measures = measureMatch ? Number(measureMatch[1]) : undefined
   const repeatMatch = text.match(/\b(?:repeat|repeated|play|write)\s+(?:it\s+)?(\d+)\s+times?\b/i)
