@@ -3,7 +3,7 @@ import { findMusicalPattern, flattenPattern } from './MusicalPatternRegistry'
 
 export type MusicIntent =
   | { type:'generate_scale'; tonic:PitchValue; scaleType:ScaleMode; direction:'ascending'|'descending'|'both'; octaves:number; rhythm:'quarter'|'eighth'|'half'|'whole'; clef:'treble'|'bass'|'alto'|'tenor'|'auto'; meter:string; bpm?:number; raw:string }
-  | { type:'generate_chord'; root:PitchValue; quality:'major'|'minor'|'diminished'|'augmented'|'dominant7'|'major7'|'minor7'; arpeggio:boolean; direction:'ascending'|'descending'|'both'; octaves:number; rhythm:'quarter'|'eighth'|'half'|'whole'; meter:string; measures?:number; repetitions:number; raw:string }
+  | { type:'generate_chord'; root:PitchValue; quality:'major'|'minor'|'diminished'|'augmented'|'dominant7'|'major7'|'minor7'; bass?:PitchValue; arpeggio:boolean; direction:'ascending'|'descending'|'both'; octaves:number; rhythm:'quarter'|'eighth'|'half'|'whole'; meter:string; measures?:number; repetitions:number; raw:string }
   | { type:'generate_interval'; root:PitchValue; interval:string; direction:'above'|'below'; rhythm:'quarter'|'eighth'|'half'|'whole'; meter:string; measures?:number; repetitions:number; raw:string }
   | { type:'generate_progression'; tonic:PitchValue; mode:'major'|'natural minor'; degrees:number[]; labels:string[]; meter:string; raw:string; appliedTargets?:Array<number|null>; qualities?:Array<'major'|'minor'|'diminished'|'augmented'|'dominant7'|'major7'|'minor7'> }
   | { type:'unknown'; raw:string }
@@ -150,6 +150,24 @@ export function parseMusicIntent(raw:string): MusicIntent {
       const tonic = parsePitchText(normalizeRoot(progressionKey[1],progressionKey[2]),4)
       if (tonic) return { type:'generate_progression', tonic, mode, degrees, labels:rawTokens, appliedTargets, qualities, meter, raw }
     }
+  }
+
+  // Slash-chord / inversion symbols: C/E, C/G, Cmaj7/E, G7/F, etc.
+  // This is intentionally parsed before applied-harmony shorthand. Letter/letter
+  // means a chord with an explicit bass; number/number remains harmonic function.
+  const slashChord = normalizedText.match(/(?:^|\s)([A-Ga-g])([#b]?)(maj7|M7|m7|min7|dom7|dim|aug|maj|major|min|minor|m|7)?\/([A-Ga-g])([#b]?)(?=\s|$)/)
+  if (slashChord) {
+    const root = parsePitchText(normalizeRoot(slashChord[1],slashChord[2]),4)
+    const bass = parsePitchText(normalizeRoot(slashChord[4],slashChord[5]),3)
+    const suffix = slashChord[3] ?? ''
+    const quality = suffix === 'maj7' || suffix === 'M7' ? 'major7'
+      : /^(m7|min7)$/i.test(suffix) ? 'minor7'
+      : /^(7|dom7)$/i.test(suffix) ? 'dominant7'
+      : /^dim$/i.test(suffix) ? 'diminished'
+      : /^aug$/i.test(suffix) ? 'augmented'
+      : /^(m|min|minor)$/i.test(suffix) ? 'minor'
+      : 'major'
+    if (root && bass) return { type:'generate_chord', root, bass, quality, arpeggio:/arpeggio/i.test(text), direction, octaves, rhythm, meter, measures, repetitions, raw }
   }
 
   // Compact chord symbols: Cmaj7, Dm7, G7, F#dim, Bbaug, etc.
