@@ -4,7 +4,7 @@ import PromptScoreHarmonyWorkbench from './PromptScoreHarmonyWorkbench'
 import { generateMusicBrainResult, type MusicBrainResult } from '../music/musicBrain'
 import { playScoreNotes } from '../music/PlaybackEngine'
 import { parseMusicIntent } from '../music/MusicIntentGrammar'
-import { getChord, spellIntervalTarget } from '../music/PitchEngine'
+import { getChord, getScalePitches, spellIntervalTarget } from '../music/PitchEngine'
 
 type View = 'home' | 'create' | 'learn' | 'teach' | 'studio'
 type Difficulty = 'Easy' | 'Grade Level' | 'Challenge'
@@ -90,6 +90,24 @@ export default function PromptScoreClassroomApp() {
 
   function generate(text = prompt) {
     const intent = parseMusicIntent(text)
+    if (intent.type === 'generate_progression') {
+      const scale = getScalePitches(intent.tonic, intent.mode, 1)
+      const qualities = intent.mode === 'major'
+        ? ['major','minor','minor','major','major','minor','diminished'] as const
+        : ['minor','diminished','major','minor','minor','major','major'] as const
+      const [meterTop,meterBottom]=intent.meter.split('/').map(Number)
+      const beatsPerMeasure=meterTop*(4/meterBottom)
+      const chordDuration = beatsPerMeasure >= 4 ? 'Whole' : beatsPerMeasure >= 2 ? 'Half' : 'Quarter'
+      const notes:any[] = intent.degrees.map((degree,i) => {
+        const root:any = scale[degree-1]
+        const chord = getChord(root, qualities[degree-1])
+        return { duration:chordDuration, accidental:root.accidental, isRest:false, pitch:root.step, octave:root.octave, measure:i+1, beat:1, chordPitches:chord.pitches }
+      })
+      const tonicName=intent.tonic.step+(intent.tonic.accidental==='Flat'?'b':intent.tonic.accidental==='Sharp'?'#':'')
+      const keySignature=(`${tonicName} ${intent.mode==='major'?'major':'minor'}`) as any
+      const next:any={notes,timeSignature:intent.meter,keySignature,harmony:{progression:intent.labels},summary:`Generated ${intent.labels.join('–')} in ${tonicName}.`}
+      setResult(next); return next
+    }
     if (intent.type === 'generate_chord') {
       const chord = getChord(intent.root, intent.quality)
       const rhythmMap = { quarter:'Quarter', eighth:'Eighth', half:'Half', whole:'Whole' } as const
