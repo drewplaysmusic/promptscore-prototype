@@ -47,7 +47,7 @@ export function parseMusicIntent(raw:string): MusicIntent {
     .replace(/([a-g])\s*-?\s*sharp/ig,'$1#')
   const rootMatch = normalizedText.match(/(?:^|[^A-Za-z])([A-Ga-g])([#b]?)(?=\s|$)/)
   const genericRoot = rootMatch ? parsePitchText(normalizeRoot(rootMatch[1],rootMatch[2]),4) : null
-  const rhythm = /eighth/i.test(text) ? 'eighth' : /half\s+notes?/i.test(text) ? 'half' : /whole\s+notes?/i.test(text) ? 'whole' : 'quarter'
+  const rhythm = /(?:eighth|8ths?|8th)/i.test(text) ? 'eighth' : /(?:half(?:\s+notes?)?|halves)/i.test(text) ? 'half' : /(?:whole(?:\s+notes?)?)/i.test(text) ? 'whole' : 'quarter'
   const direction = /descending|down(?:ward)?/i.test(text) ? 'descending' : /both|up\s+and\s+down|ascending\s+and\s+descending/i.test(text) ? 'both' : 'ascending'
   const octaveMatch = text.match(/\b(one|two|three|1|2|3)\s+octaves?\b/i)
   const octaves = octaveMatch ? ({one:1,two:2,three:3}[octaveMatch[1].toLowerCase()] ?? Number(octaveMatch[1])) : 1
@@ -81,6 +81,19 @@ export function parseMusicIntent(raw:string): MusicIntent {
         return { type:'generate_progression', tonic, mode, degrees:[4,1], labels:['IV','I'], appliedTargets:[null,null], qualities:['major','major'], meter, raw }
       }
       return { type:'generate_progression', tonic, mode, degrees:[5,1], labels:['V','I'], appliedTargets:[null,null], qualities:['major','major'], meter, raw }
+    }
+  }
+
+  // Ultra-short musician input: "251 Eb qtr", "1625 C 8ths",
+  // "1451 Bb half", "251 F 6/8 8ths". Expand a compact run of scale
+  // degrees into the same progression grammar used by spaced shorthand.
+  const compactProgression = normalizedText.match(/(?:^|\s)([1-7]{2,8})\s+([A-Ga-g])([#b]?)(?=\s|$)/)
+  if (compactProgression) {
+    const tonic = parsePitchText(normalizeRoot(compactProgression[2],compactProgression[3]),4)
+    if (tonic) {
+      const degrees = compactProgression[1].split('').map(Number)
+      const defaultMajor = ['major','minor','minor','major','major','minor','diminished'] as const
+      return { type:'generate_progression', tonic, mode:'major', degrees, labels:degrees.map(String), appliedTargets:degrees.map(()=>null), qualities:degrees.map(d=>defaultMajor[d-1]), meter, raw }
     }
   }
 
