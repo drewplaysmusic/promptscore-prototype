@@ -4,7 +4,7 @@ export type MusicIntent =
   | { type:'generate_scale'; tonic:PitchValue; scaleType:ScaleMode; direction:'ascending'|'descending'|'both'; octaves:number; rhythm:'quarter'|'eighth'|'half'|'whole'; clef:'treble'|'bass'|'alto'|'tenor'|'auto'; meter:string; bpm?:number; raw:string }
   | { type:'generate_chord'; root:PitchValue; quality:'major'|'minor'|'diminished'|'augmented'|'dominant7'|'major7'|'minor7'; arpeggio:boolean; direction:'ascending'|'descending'|'both'; octaves:number; rhythm:'quarter'|'eighth'|'half'|'whole'; meter:string; measures?:number; repetitions:number; raw:string }
   | { type:'generate_interval'; root:PitchValue; interval:string; direction:'above'|'below'; rhythm:'quarter'|'eighth'|'half'|'whole'; meter:string; measures?:number; repetitions:number; raw:string }
-  | { type:'generate_progression'; tonic:PitchValue; mode:'major'|'natural minor'; degrees:number[]; labels:string[]; meter:string; raw:string; qualities?:Array<'major'|'minor'|'diminished'|'augmented'|'dominant7'|'major7'|'minor7'> }
+  | { type:'generate_progression'; tonic:PitchValue; mode:'major'|'natural minor'; degrees:number[]; labels:string[]; meter:string; raw:string; appliedTargets?:Array<number|null>; qualities?:Array<'major'|'minor'|'diminished'|'augmented'|'dominant7'|'major7'|'minor7'> }
   | { type:'unknown'; raw:string }
 
 const SCALE_ALIASES: Array<[RegExp, ScaleMode]> = [
@@ -62,7 +62,7 @@ export function parseMusicIntent(raw:string): MusicIntent {
   const progressionKey = normalizedText.match(/\b(?:in|of)\s+([A-Ga-g])([#b]?)\s*(major|minor)?\b/i)
   if (progressionKey) {
     const beforeKey = normalizedText.slice(0, progressionKey.index).trim()
-    const tokenPattern = /^(vii|iii|vi|iv|ii|v|i|[1-7])(maj7|M7|m7|min7|dom7|dim|aug|maj|major|min|minor|m|7)?$/i
+    const tokenPattern = /^(vii|iii|vi|iv|ii|v|i|[1-7])(maj7|M7|m7|min7|dom7|dim|aug|maj|major|min|minor|m|7)?(?:\/(vii|iii|vi|iv|ii|v|i|[1-7]))?$/i
     // Find the harmony run inside a larger natural-language prompt instead of
     // requiring the progression to be the entire prefix before "in <key>".
     // This allows "quarter notes 2m7-5-1maj7 in Eb", "play ii V I in C", etc.
@@ -76,6 +76,7 @@ export function parseMusicIntent(raw:string): MusicIntent {
     if (matches.length >= 2 && matches.every(Boolean)) {
       const romanToDegree:Record<string,number> = {i:1,ii:2,iii:3,iv:4,v:5,vi:6,vii:7}
       const degrees = matches.map(m=>/^\d$/.test(m![1]) ? Number(m![1]) : romanToDegree[m![1].toLowerCase()])
+      const appliedTargets = matches.map(m=>m![3] ? (/^\d$/.test(m![3]) ? Number(m![3]) : romanToDegree[m![3].toLowerCase()]) : null)
       const mode:'major'|'natural minor' = /minor/i.test(progressionKey[3] ?? '') ? 'natural minor' : 'major'
       const defaultMajor = ['major','minor','minor','major','major','minor','diminished'] as const
       const defaultMinor = ['minor','diminished','major','minor','minor','major','major'] as const
@@ -94,7 +95,7 @@ export function parseMusicIntent(raw:string): MusicIntent {
         return defaults[degrees[i]-1]
       }) as Array<'major'|'minor'|'diminished'|'augmented'|'dominant7'|'major7'|'minor7'>
       const tonic = parsePitchText(normalizeRoot(progressionKey[1],progressionKey[2]),4)
-      if (tonic) return { type:'generate_progression', tonic, mode, degrees, labels:rawTokens, qualities, meter, raw }
+      if (tonic) return { type:'generate_progression', tonic, mode, degrees, labels:rawTokens, appliedTargets, qualities, meter, raw }
     }
   }
 
