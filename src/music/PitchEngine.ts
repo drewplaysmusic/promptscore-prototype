@@ -188,9 +188,11 @@ export function getDiatonicScalePitches(root: PitchValue, mode: ScaleMode, octav
       const targetMidi = rootMidi + interval + octave * 12
       const targetSemitone = normalizeModulo(targetMidi,12)
       const accidental = accidentalForSemitone(step,targetSemitone)
-      const naturalMidiAtC4 = (4 + 1) * 12 + STEP_TO_SEMITONE[step]
-      const relative = targetMidi - naturalMidiAtC4
-      const pitchOctave = 4 + Math.floor(relative / 12)
+      // Determine the written octave from diatonic letter progression, not MIDI
+      // semitone math. This matters for flats such as Eb: Eb4 must stay on the
+      // E4 staff position rather than being misclassified as another octave.
+      const diatonicOffset = rootStepIndex + degree
+      const pitchOctave = root.octave + octave + Math.floor(diatonicOffset / 7)
       pitches.push({ step, accidental, octave:pitchOctave })
     })
   }
