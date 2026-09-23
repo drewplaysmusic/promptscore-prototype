@@ -70,8 +70,12 @@ function getVexAccidental(accidental: AccidentalValue): string | null {
   return null
 }
 
-function getPitchVexKey(pitch: { pitch: PitchValue; octave?: number }): string {
-  return `${pitch.pitch.toLowerCase()}/${pitch.octave ?? 4}`
+function getPitchVexKey(value: { pitch?: PitchValue; step?: PitchValue; octave?: number }): string {
+  // NoteEvent uses "pitch"; PitchEngine PitchValue uses "step".
+  // Supporting both lets generated chords/intervals share the renderer safely.
+  const pitch = value.pitch ?? value.step
+  if (!pitch) return 'c/4'
+  return `${pitch.toLowerCase()}/${value.octave ?? 4}`
 }
 
 function getVexKeys(note: NoteEvent): string[] {
