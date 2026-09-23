@@ -64,6 +64,26 @@ export function parseMusicIntent(raw:string): MusicIntent {
   const repeatMatch = text.match(/\b(?:repeat|repeated|play|write)\s+(?:it\s+)?(\d+)\s+times?\b/i)
   const repetitions = repeatMatch ? Math.max(1, Number(repeatMatch[1])) : 1
 
+  // Cadence shorthand expands into the same progression intent used by
+  // ordinary Roman/Nashville harmony. Keep this deterministic and leave
+  // inversion/voice-leading refinements for the harmony engine.
+  const cadenceKey = normalizedText.match(/\b(?:in|of)\s+([A-Ga-g])([#b]?)\s*(major|minor)?\b/i)
+  const cadenceMatch = normalizedText.match(/\b(PAC|IAC|HC|PC|perfect\s+authentic\s+cadence|imperfect\s+authentic\s+cadence|half\s+cadence|plagal\s+cadence|authentic\s+cadence)\b/i)
+  if (cadenceKey && cadenceMatch) {
+    const name = cadenceMatch[1].toLowerCase()
+    const mode:'major'|'natural minor' = /minor/i.test(cadenceKey[3] ?? '') ? 'natural minor' : 'major'
+    const tonic = parsePitchText(normalizeRoot(cadenceKey[1],cadenceKey[2]),4)
+    if (tonic) {
+      if (name === 'hc' || name.includes('half')) {
+        return { type:'generate_progression', tonic, mode, degrees:[1,5], labels:['I','V'], appliedTargets:[null,null], qualities:['major','major'], meter, raw }
+      }
+      if (name === 'pc' || name.includes('plagal')) {
+        return { type:'generate_progression', tonic, mode, degrees:[4,1], labels:['IV','I'], appliedTargets:[null,null], qualities:['major','major'], meter, raw }
+      }
+      return { type:'generate_progression', tonic, mode, degrees:[5,1], labels:['V','I'], appliedTargets:[null,null], qualities:['major','major'], meter, raw }
+    }
+  }
+
   // Harmony shorthand: Roman numerals, Nashville-style numbers, and common
   // seventh-chord suffixes can be mixed: ii7 V7 Imaj7, 2m7 5 1maj7, etc.
   const progressionKey = normalizedText.match(/\b(?:in|of)\s+([A-Ga-g])([#b]?)\s*(major|minor)?\b/i)
