@@ -94,25 +94,57 @@ export default function PromptScoreClassroomApp() {
       const chord = getChord(intent.root, intent.quality)
       const rhythmMap = { quarter:'Quarter', eighth:'Eighth', half:'Half', whole:'Whole' } as const
       const duration = rhythmMap[intent.rhythm]
-      let pitches = [...chord.pitches]
+      const durationBeats = duration === 'Whole' ? 4 : duration === 'Half' ? 2 : duration === 'Quarter' ? 1 : 0.5
+      const [meterTop, meterBottom] = intent.meter.split('/').map(Number)
+      const beatsPerMeasure = meterTop * (4 / meterBottom)
+      let basePitches = [...chord.pitches]
+      if (intent.arpeggio && intent.octaves > 1) {
+        const expanded:any[] = []
+        for (let octave=0; octave<intent.octaves; octave++) {
+          chord.pitches.forEach((p:any) => expanded.push({...p, octave:p.octave+octave}))
+        }
+        const finalRoot:any = {...intent.root, octave:intent.root.octave+intent.octaves}
+        basePitches = [...expanded, finalRoot]
+      }
+      let pitches = [...basePitches]
       if (intent.direction === 'descending') pitches = [...pitches].reverse()
       if (intent.direction === 'both') pitches = [...pitches, ...pitches.slice(0,-1).reverse()]
+      const repeatedPitches = Array.from({length:intent.repetitions},()=>pitches).flat()
       const rootName = intent.root.step + (intent.root.accidental === 'Flat' ? 'b' : intent.root.accidental === 'Sharp' ? '#' : '')
-      const durationBeats = duration === 'Whole' ? 4 : duration === 'Half' ? 2 : duration === 'Quarter' ? 1 : 0.5
-      const notes:any[] = intent.arpeggio
-        ? pitches.map((p, i) => {
+      let notes:any[] = intent.arpeggio
+        ? repeatedPitches.map((p:any, i:number) => {
             const absoluteBeat = i * durationBeats
-            return { duration, accidental:p.accidental, isRest:false, pitch:p.step, octave:p.octave, measure:1+Math.floor(absoluteBeat/4), beat:1+(absoluteBeat%4) }
+            return { duration, accidental:p.accidental, isRest:false, pitch:p.step, octave:p.octave, measure:1+Math.floor(absoluteBeat/beatsPerMeasure), beat:1+(absoluteBeat%beatsPerMeasure) }
           })
-        : [{ duration:'Whole', accidental:intent.root.accidental, isRest:false, pitch:intent.root.step, octave:intent.root.octave, measure:1, beat:1, chordPitches:pitches }]
-      const next:any = { notes, timeSignature:'4/4', keySignature:'C major', harmony:{ progression:[] }, summary:`Generated ${rootName} ${intent.quality} ${intent.arpeggio?'arpeggio':'chord'}.` }
+        : Array.from({length:intent.repetitions},(_,i) => ({ duration, accidental:intent.root.accidental, isRest:false, pitch:intent.root.step, octave:intent.root.octave, measure:1+Math.floor((i*durationBeats)/beatsPerMeasure), beat:1+((i*durationBeats)%beatsPerMeasure), chordPitches:chord.pitches }))
+      if (intent.measures && notes.length) {
+        const original=[...notes]
+        let i=0
+        while (Math.max(...notes.map(n=>n.measure)) < intent.measures) {
+          const source=original[i%original.length]
+          const absoluteBeat=notes.length*durationBeats
+          notes.push({...source, measure:1+Math.floor(absoluteBeat/beatsPerMeasure), beat:1+(absoluteBeat%beatsPerMeasure)})
+          i++
+        }
+        notes=notes.filter(n=>n.measure<=intent.measures)
+      }
+      const next:any = { notes, timeSignature:intent.meter, keySignature:'C major', harmony:{ progression:[] }, summary:`Generated ${rootName} ${intent.quality} ${intent.arpeggio?'arpeggio':'chord'}.` }
       setResult(next); return next
     }
     if (intent.type === 'generate_interval') {
       const semitones:Record<string,number> = {'perfect unison':0,unison:0,'minor second':1,'major second':2,second:2,'2nd':2,'minor third':3,'major third':4,third:4,'3rd':4,'perfect fourth':5,fourth:5,'4th':5,'augmented fourth':6,'diminished fifth':6,'perfect fifth':7,fifth:7,'5th':7,'minor sixth':8,'major sixth':9,sixth:9,'6th':9,'minor seventh':10,'major seventh':11,seventh:11,'7th':11,'perfect octave':12,octave:12,'8ve':12}
       const target = spellIntervalTarget(intent.root, intent.interval, semitones[intent.interval] ?? 7, intent.direction)
-      const notes:any[] = [{ duration:'Whole', accidental:intent.root.accidental, isRest:false, pitch:intent.root.step, octave:intent.root.octave, measure:1, beat:1, chordPitches:[intent.root,target] }]
-      const next:any = { notes, timeSignature:'4/4', keySignature:'C major', harmony:{ progression:[] }, summary:`Generated ${intent.interval} ${intent.direction} root.` }
+      const rhythmMap = { quarter:'Quarter', eighth:'Eighth', half:'Half', whole:'Whole' } as const
+      const duration = rhythmMap[intent.rhythm]
+      const durationBeats = duration === 'Whole' ? 4 : duration === 'Half' ? 2 : duration === 'Quarter' ? 1 : 0.5
+      const [meterTop,meterBottom]=intent.meter.split('/').map(Number)
+      const beatsPerMeasure=meterTop*(4/meterBottom)
+      const count=intent.measures ? Math.max(intent.repetitions,Math.ceil(intent.measures*beatsPerMeasure/durationBeats)) : intent.repetitions
+      const notes:any[] = Array.from({length:count},(_,i)=>{
+        const absoluteBeat=i*durationBeats
+        return { duration, accidental:intent.root.accidental, isRest:false, pitch:intent.root.step, octave:intent.root.octave, measure:1+Math.floor(absoluteBeat/beatsPerMeasure), beat:1+(absoluteBeat%beatsPerMeasure), chordPitches:[intent.root,target] }
+      }).filter(n=>!intent.measures || n.measure<=intent.measures)
+      const next:any = { notes, timeSignature:intent.meter, keySignature:'C major', harmony:{ progression:[] }, summary:`Generated ${intent.interval} ${intent.direction} root.` }
       setResult(next); return next
     }
     const next = generateMusicBrainResult(text, { duration: 'Quarter', accidental: null, timeSignature: '4/4' })
