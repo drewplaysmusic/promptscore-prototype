@@ -38,7 +38,13 @@ function parseTonic(text:string): PitchValue | null {
 
 export function parseMusicIntent(raw:string): MusicIntent {
   const text = raw.trim()
-  const rootMatch = text.replace(/([a-g])\s*-?\s*flat/ig,'$1b').replace(/([a-g])\s*-?\s*sharp/ig,'$1#').match(/\b([A-Ga-g])\s*([#b])?\b/)
+  // Parse a musical root without treating the "b" in words such as "above"
+  // as a flat accidental. Word boundaries do not work after "#" because # is
+  // not a word character, so use explicit surrounding-character guards.
+  const normalizedText = text
+    .replace(/([a-g])\s*-?\s*flat/ig,'$1b')
+    .replace(/([a-g])\s*-?\s*sharp/ig,'$1#')
+  const rootMatch = normalizedText.match(/(?:^|[^A-Za-z])([A-Ga-g])([#b]?)(?=\s|$)/)
   const genericRoot = rootMatch ? parsePitchText(normalizeRoot(rootMatch[1],rootMatch[2]),4) : null
   const rhythm = /eighth/i.test(text) ? 'eighth' : /half\s+notes?/i.test(text) ? 'half' : /whole\s+notes?/i.test(text) ? 'whole' : 'quarter'
   const direction = /descending|down(?:ward)?/i.test(text) ? 'descending' : /both|up\s+and\s+down|ascending\s+and\s+descending/i.test(text) ? 'both' : 'ascending'
