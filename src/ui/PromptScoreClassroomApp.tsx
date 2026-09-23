@@ -101,8 +101,20 @@ export default function PromptScoreClassroomApp() {
       const chordDuration = requestedDuration ?? (beatsPerMeasure >= 4 ? 'Whole' : beatsPerMeasure >= 2 ? 'Half' : 'Quarter')
       const durationBeats = chordDuration === 'Whole' ? 4 : chordDuration === 'Half' ? 2 : chordDuration === 'Quarter' ? 1 : 0.5
       const notes:any[] = intent.degrees.map((degree,i) => {
-        const root:any = scale[degree-1]
-        const chord = getChord(root, intent.qualities?.[i] ?? qualities[degree-1])
+        let root:any = scale[degree-1]
+        let quality:any = intent.qualities?.[i] ?? qualities[degree-1]
+        const appliedTarget = intent.appliedTargets?.[i]
+        if (appliedTarget) {
+          // X/Y means scale degree X inside the temporary key of degree Y.
+          // Most commonly V/V or 5/5: build a temporary major scale on Y,
+          // then take X from that scale. Applied dominants default to dominant7
+          // when the numerator is V/5.
+          const temporaryTonic:any = scale[appliedTarget-1]
+          const temporaryScale = getScalePitches(temporaryTonic, 'major', 1)
+          root = temporaryScale[degree-1]
+          if (degree === 5) quality = 'dominant7'
+        }
+        const chord = getChord(root, quality)
         const absoluteBeat=i*durationBeats
         return { duration:chordDuration, accidental:root.accidental, isRest:false, pitch:root.step, octave:root.octave, measure:1+Math.floor(absoluteBeat/beatsPerMeasure), beat:1+(absoluteBeat%beatsPerMeasure), chordPitches:chord.pitches }
       })
