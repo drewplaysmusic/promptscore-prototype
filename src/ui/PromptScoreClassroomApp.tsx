@@ -3,6 +3,8 @@ import ScoreRenderer from './ScoreRenderer'
 import PromptScoreHarmonyWorkbench from './PromptScoreHarmonyWorkbench'
 import { generateMusicBrainResult, type MusicBrainResult } from '../music/musicBrain'
 import { playScoreNotes } from '../music/PlaybackEngine'
+import { parseMusicIntent } from '../music/MusicIntentGrammar'
+import { getChord, pitchToMidi, midiToPitch, type PitchValue as EnginePitch } from '../music/PitchEngine'
 
 type View = 'home' | 'create' | 'learn' | 'teach' | 'studio'
 type Difficulty = 'Easy' | 'Grade Level' | 'Challenge'
@@ -87,6 +89,28 @@ export default function PromptScoreClassroomApp() {
   }, [teachTopic, grade, difficulty, measures])
 
   function generate(text = prompt) {
+    const intent = parseMusicIntent(text)
+    if (intent.type === 'generate_chord') {
+      const chord = getChord(intent.root, intent.quality)
+      const rhythmMap = { quarter:'Quarter', eighth:'Eighth', half:'Half', whole:'Whole' } as const
+      const duration = rhythmMap[intent.rhythm]
+      let pitches = [...chord.pitches]
+      if (intent.direction === 'descending') pitches = [...pitches].reverse()
+      if (intent.direction === 'both') pitches = [...pitches, ...pitches.slice(0,-1).reverse()]
+      const rootName = intent.root.step + (intent.root.accidental === 'Flat' ? 'b' : intent.root.accidental === 'Sharp' ? '#' : '')
+      const notes:any[] = intent.arpeggio
+        ? pitches.map((p, i) => ({ duration, accidental:p.accidental, isRest:false, pitch:p.step, octave:p.octave, measure:1+Math.floor(i/8), beat:1+(i%8)*0.5 }))
+        : [{ duration, accidental:intent.root.accidental, isRest:false, pitch:intent.root.step, octave:intent.root.octave, measure:1, beat:1, chordPitches:pitches }]
+      const next:any = { notes, timeSignature:'4/4', keySignature:'C major', harmony:{ progression:[] }, summary:`Generated ${rootName} ${intent.quality} ${intent.arpeggio?'arpeggio':'chord'}.` }
+      setResult(next); return next
+    }
+    if (intent.type === 'generate_interval') {
+      const semitones:Record<string,number> = {'perfect unison':0,unison:0,'minor second':1,'major second':2,second:2,'2nd':2,'minor third':3,'major third':4,third:4,'3rd':4,'perfect fourth':5,fourth:5,'4th':5,'augmented fourth':6,'diminished fifth':6,'perfect fifth':7,fifth:7,'5th':7,'minor sixth':8,'major sixth':9,sixth:9,'6th':9,'minor seventh':10,'major seventh':11,seventh:11,'7th':11,'perfect octave':12,octave:12,'8ve':12}
+      const target = midiToPitch(pitchToMidi(intent.root) + (intent.direction==='below'?-1:1)*(semitones[intent.interval] ?? 7))
+      const notes:any[] = [{ duration:'Whole', accidental:intent.root.accidental, isRest:false, pitch:intent.root.step, octave:intent.root.octave, measure:1, beat:1, chordPitches:[intent.root,target] }]
+      const next:any = { notes, timeSignature:'4/4', keySignature:'C major', harmony:{ progression:[] }, summary:`Generated ${intent.interval} ${intent.direction} root.` }
+      setResult(next); return next
+    }
     const next = generateMusicBrainResult(text, { duration: 'Quarter', accidental: null, timeSignature: '4/4' })
     setResult(next)
     return next
