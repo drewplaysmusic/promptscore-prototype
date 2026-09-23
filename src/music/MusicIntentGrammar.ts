@@ -1,4 +1,5 @@
 import { getScalePitches, parsePitchText, pitchToMidi, type PitchValue, type ScaleMode } from './PitchEngine'
+import { findMusicalPattern, flattenPattern } from './MusicalPatternRegistry'
 
 export type MusicIntent =
   | { type:'generate_scale'; tonic:PitchValue; scaleType:ScaleMode; direction:'ascending'|'descending'|'both'; octaves:number; rhythm:'quarter'|'eighth'|'half'|'whole'; clef:'treble'|'bass'|'alto'|'tenor'|'auto'; meter:string; bpm?:number; raw:string }
@@ -84,17 +85,15 @@ export function parseMusicIntent(raw:string): MusicIntent {
     }
   }
 
-  // Common-form shorthand. Start with a canonical 12-bar blues form:
-  // I I I I | IV IV I I | V IV I V. This uses the same progression intent
-  // so notation/playback stay on the existing harmony path.
-  const bluesMatch = normalizedText.match(/\b(?:(?:12|twelve)[-\s]*bar\s+blues|blues)\s+(?:in\s+)?([A-Ga-g])([#b]?)(?=\s|$)/i)
-  if (bluesMatch) {
-    const tonic = parsePitchText(normalizeRoot(bluesMatch[1],bluesMatch[2]),4)
+  // Named musical patterns/forms are data-driven through the registry.
+  const namedPattern = findMusicalPattern(normalizedText)
+  if (namedPattern) {
+    const keyMatch = normalizedText.match(/(?:^|\s)(?:in\s+)?([A-Ga-g])([#b]?)(?=\s|$)/g)
+    const lastKey = keyMatch?.[keyMatch.length-1]?.match(/([A-Ga-g])([#b]?)$/)
+    const tonic = lastKey ? parsePitchText(normalizeRoot(lastKey[1],lastKey[2]),4) : null
     if (tonic) {
-      const degrees = [1,1,1,1,4,4,1,1,5,4,1,5]
-      const labels = degrees.map(d=>String(d))
-      const qualities = degrees.map(()=> 'dominant7' as const)
-      return { type:'generate_progression', tonic, mode:'major', degrees, labels, appliedTargets:degrees.map(()=>null), qualities, meter, raw }
+      const flat = flattenPattern(namedPattern)
+      return { type:'generate_progression', tonic, mode:'major', degrees:flat.degrees, labels:flat.labels, appliedTargets:flat.degrees.map(()=>null), qualities:flat.qualities, meter: meter === '4/4' ? namedPattern.defaultMeter : meter, raw }
     }
   }
 
