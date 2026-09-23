@@ -4,7 +4,7 @@ import PromptScoreHarmonyWorkbench from './PromptScoreHarmonyWorkbench'
 import { generateMusicBrainResult, type MusicBrainResult } from '../music/musicBrain'
 import { playScoreNotes } from '../music/PlaybackEngine'
 import { parseMusicIntent } from '../music/MusicIntentGrammar'
-import { getChord, pitchToMidi, midiToPitch } from '../music/PitchEngine'
+import { getChord, spellIntervalTarget } from '../music/PitchEngine'
 
 type View = 'home' | 'create' | 'learn' | 'teach' | 'studio'
 type Difficulty = 'Easy' | 'Grade Level' | 'Challenge'
@@ -110,7 +110,7 @@ export default function PromptScoreClassroomApp() {
     }
     if (intent.type === 'generate_interval') {
       const semitones:Record<string,number> = {'perfect unison':0,unison:0,'minor second':1,'major second':2,second:2,'2nd':2,'minor third':3,'major third':4,third:4,'3rd':4,'perfect fourth':5,fourth:5,'4th':5,'augmented fourth':6,'diminished fifth':6,'perfect fifth':7,fifth:7,'5th':7,'minor sixth':8,'major sixth':9,sixth:9,'6th':9,'minor seventh':10,'major seventh':11,seventh:11,'7th':11,'perfect octave':12,octave:12,'8ve':12}
-      const target = midiToPitch(pitchToMidi(intent.root) + (intent.direction==='below'?-1:1)*(semitones[intent.interval] ?? 7))
+      const target = spellIntervalTarget(intent.root, intent.interval, semitones[intent.interval] ?? 7, intent.direction)
       const notes:any[] = [{ duration:'Whole', accidental:intent.root.accidental, isRest:false, pitch:intent.root.step, octave:intent.root.octave, measure:1, beat:1, chordPitches:[intent.root,target] }]
       const next:any = { notes, timeSignature:'4/4', keySignature:'C major', harmony:{ progression:[] }, summary:`Generated ${intent.interval} ${intent.direction} root.` }
       setResult(next); return next
