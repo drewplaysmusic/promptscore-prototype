@@ -48,6 +48,9 @@ export function parseMusicIntent(raw:string): MusicIntent {
   const genericRoot = rootMatch ? parsePitchText(normalizeRoot(rootMatch[1],rootMatch[2]),4) : null
   const rhythm = /eighth/i.test(text) ? 'eighth' : /half\s+notes?/i.test(text) ? 'half' : /whole\s+notes?/i.test(text) ? 'whole' : 'quarter'
   const direction = /descending|down(?:ward)?/i.test(text) ? 'descending' : /both|up\s+and\s+down|ascending\s+and\s+descending/i.test(text) ? 'both' : 'ascending'
+  const octaveMatch = text.match(/\b(one|two|three|1|2|3)\s+octaves?\b/i)
+  const octaves = octaveMatch ? ({one:1,two:2,three:3}[octaveMatch[1].toLowerCase()] ?? Number(octaveMatch[1])) : 1
+  const meter = text.match(/\b(\d+)\s*\/\s*(\d+)\b/)?.slice(1,3).join('/') ?? '4/4'
   const measureMatch = text.match(/\b(\d+)\s+measures?\b/i)
   const measures = measureMatch ? Number(measureMatch[1]) : undefined
   const repeatMatch = text.match(/\b(?:repeat|repeated|play|write)\s+(?:it\s+)?(\d+)\s+times?\b/i)
@@ -69,10 +72,7 @@ export function parseMusicIntent(raw:string): MusicIntent {
   const scaleType = SCALE_ALIASES.find(([pattern])=>pattern.test(text))?.[1]
   if (!tonic || !scaleType) return { type:'unknown', raw }
 
-  const octaveMatch = text.match(/\b(one|two|three|1|2|3)\s+octaves?\b/i)
-  const octaves = octaveMatch ? ({one:1,two:2,three:3}[octaveMatch[1].toLowerCase()] ?? Number(octaveMatch[1])) : 1
   const clef = /bass\s+clef/i.test(text) ? 'bass' : /alto\s+clef/i.test(text) ? 'alto' : /tenor\s+clef/i.test(text) ? 'tenor' : /treble\s+clef/i.test(text) ? 'treble' : 'auto'
-  const meter = text.match(/\b(\d+)\s*\/\s*(\d+)\b/)?.slice(1,3).join('/') ?? '4/4'
   const bpmText = text.match(/\b(?:at\s+)?(\d{2,3})\s*(?:bpm)?\b/i)?.[1]
   const bpm = bpmText ? Number(bpmText) : undefined
 
