@@ -61,9 +61,9 @@ export function parseMusicIntent(raw:string): MusicIntent {
 
   const octaveMatch = text.match(/\b(one|two|three|1|2|3)\s+octaves?\b/i)
   const octaves = octaveMatch ? ({one:1,two:2,three:3}[octaveMatch[1].toLowerCase()] ?? Number(octaveMatch[1])) : 1
-  const clef = /bass\\s+clef/i.test(text) ? 'bass' : /alto\\s+clef/i.test(text) ? 'alto' : /tenor\\s+clef/i.test(text) ? 'tenor' : /treble\\s+clef/i.test(text) ? 'treble' : 'auto'
-  const meter = text.match(/\\b(\\d+)\\s*\\/\\s*(\\d+)\\b/)?.slice(1,3).join('/') ?? '4/4'
-  const bpmText = text.match(/\\b(?:at\\s+)?(\\d{2,3})\\s*(?:bpm)?\\b/i)?.[1]
+  const clef = /bass\s+clef/i.test(text) ? 'bass' : /alto\s+clef/i.test(text) ? 'alto' : /tenor\s+clef/i.test(text) ? 'tenor' : /treble\s+clef/i.test(text) ? 'treble' : 'auto'
+  const meter = text.match(/\b(\d+)\s*\/\s*(\d+)\b/)?.slice(1,3).join('/') ?? '4/4'
+  const bpmText = text.match(/\b(?:at\s+)?(\d{2,3})\s*(?:bpm)?\b/i)?.[1]
   const bpm = bpmText ? Number(bpmText) : undefined
 
   return { type:'generate_scale', tonic, scaleType, direction, octaves, rhythm, clef, meter, bpm, raw }
