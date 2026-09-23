@@ -62,8 +62,16 @@ export function parseMusicIntent(raw:string): MusicIntent {
   const progressionKey = normalizedText.match(/\b(?:in|of)\s+([A-Ga-g])([#b]?)\s*(major|minor)?\b/i)
   if (progressionKey) {
     const beforeKey = normalizedText.slice(0, progressionKey.index).trim()
-    const rawTokens = beforeKey.split(/\s*(?:[-–—>]|\s)\s*/).filter(Boolean)
     const tokenPattern = /^(vii|iii|vi|iv|ii|v|i|[1-7])(maj7|M7|m7|min7|dom7|dim|aug|maj|major|min|minor|m|7)?$/i
+    // Find the harmony run inside a larger natural-language prompt instead of
+    // requiring the progression to be the entire prefix before "in <key>".
+    // This allows "quarter notes 2m7-5-1maj7 in Eb", "play ii V I in C", etc.
+    const pieces = beforeKey.split(/\s+/).filter(Boolean)
+    let rawTokens:string[] = []
+    for (let start=0; start<pieces.length; start++) {
+      const candidate = pieces.slice(start).join(' ').split(/\s*(?:[-–—>]|\s)\s*/).filter(Boolean)
+      if (candidate.length >= 2 && candidate.every(t=>tokenPattern.test(t))) { rawTokens=candidate; break }
+    }
     const matches = rawTokens.map(t=>t.match(tokenPattern))
     if (matches.length >= 2 && matches.every(Boolean)) {
       const romanToDegree:Record<string,number> = {i:1,ii:2,iii:3,iv:4,v:5,vi:6,vii:7}
