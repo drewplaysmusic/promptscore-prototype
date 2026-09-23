@@ -4,7 +4,7 @@ export type MusicIntent =
   | { type:'generate_scale'; tonic:PitchValue; scaleType:ScaleMode; direction:'ascending'|'descending'|'both'; octaves:number; rhythm:'quarter'|'eighth'|'half'|'whole'; clef:'treble'|'bass'|'alto'|'tenor'|'auto'; meter:string; bpm?:number; raw:string }
   | { type:'generate_chord'; root:PitchValue; quality:'major'|'minor'|'diminished'|'augmented'|'dominant7'|'major7'|'minor7'; arpeggio:boolean; direction:'ascending'|'descending'|'both'; octaves:number; rhythm:'quarter'|'eighth'|'half'|'whole'; meter:string; measures?:number; repetitions:number; raw:string }
   | { type:'generate_interval'; root:PitchValue; interval:string; direction:'above'|'below'; rhythm:'quarter'|'eighth'|'half'|'whole'; meter:string; measures?:number; repetitions:number; raw:string }
-  | { type:'generate_progression'; tonic:PitchValue; mode:'major'|'natural minor'; degrees:number[]; labels:string[]; meter:string; raw:string }
+  | { type:'generate_progression'; tonic:PitchValue; mode:'major'|'natural minor'; degrees:number[]; labels:string[]; meter:string; raw:string; qualities?:Array<'major'|'minor'|'diminished'|'augmented'|'dominant7'|'major7'|'minor7'> }
   | { type:'unknown'; raw:string }
 
 const SCALE_ALIASES: Array<[RegExp, ScaleMode]> = [
@@ -57,16 +57,37 @@ export function parseMusicIntent(raw:string): MusicIntent {
   const repeatMatch = text.match(/\b(?:repeat|repeated|play|write)\s+(?:it\s+)?(\d+)\s+times?\b/i)
   const repetitions = repeatMatch ? Math.max(1, Number(repeatMatch[1])) : 1
 
-  // Harmony shorthand: Roman numerals and ordinary numbers are interchangeable.
-  // Examples: "ii V I in Eb", "2 5 1 in Eb", "1-4-5-1 in Bb".
-  const progressionText = normalizedText.match(/(?:^|\s)((?:(?:vii|iii|vi|iv|ii|v|i|[1-7])(?:\s*[-–—>]\s*|\s+)){1,}(?:vii|iii|vi|iv|ii|v|i|[1-7]))(?=\s+(?:in|of)\s+|\s*$)/i)
+  // Harmony shorthand: Roman numerals, Nashville-style numbers, and common
+  // seventh-chord suffixes can be mixed: ii7 V7 Imaj7, 2m7 5 1maj7, etc.
   const progressionKey = normalizedText.match(/\b(?:in|of)\s+([A-Ga-g])([#b]?)\s*(major|minor)?\b/i)
-  if (progressionText && progressionKey) {
-    const tokens = progressionText[1].match(/vii|iii|vi|iv|ii|v|i|[1-7]/ig) ?? []
-    const romanToDegree:Record<string,number> = {i:1,ii:2,iii:3,iv:4,v:5,vi:6,vii:7}
-    const degrees = tokens.map(t => /^\d$/.test(t) ? Number(t) : romanToDegree[t.toLowerCase()])
-    const tonic = parsePitchText(normalizeRoot(progressionKey[1],progressionKey[2]),4)
-    if (tonic && degrees.length >= 2) return { type:'generate_progression', tonic, mode:/minor/i.test(progressionKey[3] ?? '')?'natural minor':'major', degrees, labels:tokens, meter, raw }
+  if (progressionKey) {
+    const beforeKey = normalizedText.slice(0, progressionKey.index).trim()
+    const rawTokens = beforeKey.split(/\s*(?:[-–—>]|\s)\s*/).filter(Boolean)
+    const tokenPattern = /^(vii|iii|vi|iv|ii|v|i|[1-7])(maj7|M7|m7|min7|dom7|dim|aug|maj|major|min|minor|m|7)?$/i
+    const matches = rawTokens.map(t=>t.match(tokenPattern))
+    if (matches.length >= 2 && matches.every(Boolean)) {
+      const romanToDegree:Record<string,number> = {i:1,ii:2,iii:3,iv:4,v:5,vi:6,vii:7}
+      const degrees = matches.map(m=>/^\d$/.test(m![1]) ? Number(m![1]) : romanToDegree[m![1].toLowerCase()])
+      const mode:'major'|'natural minor' = /minor/i.test(progressionKey[3] ?? '') ? 'natural minor' : 'major'
+      const defaultMajor = ['major','minor','minor','major','major','minor','diminished'] as const
+      const defaultMinor = ['minor','diminished','major','minor','minor','major','major'] as const
+      const defaults = mode === 'major' ? defaultMajor : defaultMinor
+      const qualities = matches.map((m,i)=>{
+        const suffix=m![2] ?? ''
+        if (suffix === 'maj7' || suffix === 'M7') return 'major7'
+        if (/^(m7|min7)$/i.test(suffix)) return 'minor7'
+        if (/^(7|dom7)$/i.test(suffix)) return 'dominant7'
+        if (/^dim$/i.test(suffix)) return 'diminished'
+        if (/^aug$/i.test(suffix)) return 'augmented'
+        if (/^(m|min|minor)$/i.test(suffix)) return 'minor'
+        if (/^(maj|major)$/i.test(suffix)) return 'major'
+        // Lower-case Roman numerals imply minor quality unless vii, which is diminished.
+        if (/^[iv]+$/.test(m![1]) && !/^\d$/.test(m![1])) return m![1].toLowerCase()==='vii'?'diminished':'minor'
+        return defaults[degrees[i]-1]
+      }) as Array<'major'|'minor'|'diminished'|'augmented'|'dominant7'|'major7'|'minor7'>
+      const tonic = parsePitchText(normalizeRoot(progressionKey[1],progressionKey[2]),4)
+      if (tonic) return { type:'generate_progression', tonic, mode, degrees, labels:rawTokens, qualities, meter, raw }
+    }
   }
 
   // Compact chord symbols: Cmaj7, Dm7, G7, F#dim, Bbaug, etc.
