@@ -84,6 +84,20 @@ export function parseMusicIntent(raw:string): MusicIntent {
     }
   }
 
+  // Common-form shorthand. Start with a canonical 12-bar blues form:
+  // I I I I | IV IV I I | V IV I V. This uses the same progression intent
+  // so notation/playback stay on the existing harmony path.
+  const bluesMatch = normalizedText.match(/\b(?:(?:12|twelve)[-\s]*bar\s+blues|blues)\s+(?:in\s+)?([A-Ga-g])([#b]?)(?=\s|$)/i)
+  if (bluesMatch) {
+    const tonic = parsePitchText(normalizeRoot(bluesMatch[1],bluesMatch[2]),4)
+    if (tonic) {
+      const degrees = [1,1,1,1,4,4,1,1,5,4,1,5]
+      const labels = degrees.map(d=>String(d))
+      const qualities = degrees.map(()=> 'dominant7' as const)
+      return { type:'generate_progression', tonic, mode:'major', degrees, labels, appliedTargets:degrees.map(()=>null), qualities, meter, raw }
+    }
+  }
+
   // Ultra-short musician input: "251 Eb qtr", "1625 C 8ths",
   // "1451 Bb half", "251 F 6/8 8ths". Expand a compact run of scale
   // degrees into the same progression grammar used by spaced shorthand.
