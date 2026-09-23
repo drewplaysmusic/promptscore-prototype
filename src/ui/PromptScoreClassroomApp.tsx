@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react'
 import ScoreRenderer from './ScoreRenderer'
+import ChordChartRenderer from './ChordChartRenderer'
 import PromptScoreHarmonyWorkbench from './PromptScoreHarmonyWorkbench'
 import { generateMusicBrainResult, type MusicBrainResult } from '../music/musicBrain'
 import { playScoreNotes } from '../music/PlaybackEngine'
@@ -59,13 +60,18 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function ScoreCard({ result, title, onPlay }: { result: MusicBrainResult | null; title: string; onPlay: () => void }) {
+  const [scoreView,setScoreView]=useState<'staff'|'chart'>('staff')
   return (
     <div style={{ ...cardStyle, padding: 20, minHeight: 360 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 6 }}>
         <div><div style={{ fontSize: 12, color: COLORS.muted, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em' }}>PromptScore</div><h2 style={{ margin: '4px 0 2px', fontSize: 24, color: COLORS.ink }}>{title}</h2>{result && <div style={{ color: COLORS.muted, fontSize: 14 }}>{result.keySignature} · {result.timeSignature}</div>}</div>
         <button onClick={onPlay} disabled={!result?.notes.length} style={{ width: 46, height: 46, borderRadius: 999, border: 0, background: result?.notes.length ? COLORS.blue : '#c8d3e2', color: '#fff', fontSize: 18, cursor: result?.notes.length ? 'pointer' : 'default' }}>▶</button>
       </div>
-      {result ? <ScoreRenderer notes={result.notes as any} timeSignature={result.timeSignature as any} keySignature={result.keySignature as any} harmonyProgression={result.harmony.progression} /> : <div style={{ display: 'grid', placeItems: 'center', minHeight: 280, color: COLORS.muted, textAlign: 'center' }}>Generate music and the score will appear here.</div>}
+      {result && <div style={{display:'flex',gap:6,margin:'12px 0 8px'}}>
+        <button onClick={()=>setScoreView('staff')} style={{border:'1px solid '+COLORS.line,borderRadius:9,padding:'7px 12px',background:scoreView==='staff'?COLORS.ink:'#fff',color:scoreView==='staff'?'#fff':COLORS.ink,fontWeight:750,cursor:'pointer'}}>Traditional Score</button>
+        <button onClick={()=>setScoreView('chart')} style={{border:'1px solid '+COLORS.line,borderRadius:9,padding:'7px 12px',background:scoreView==='chart'?COLORS.ink:'#fff',color:scoreView==='chart'?'#fff':COLORS.ink,fontWeight:750,cursor:'pointer'}}>Chord Chart</button>
+      </div>}
+      {result ? (scoreView==='staff' ? <ScoreRenderer notes={result.notes as any} timeSignature={result.timeSignature as any} keySignature={result.keySignature as any} harmonyProgression={result.harmony.progression} /> : <ChordChartRenderer notes={result.notes as any} harmonyProgression={result.harmony.progression} />) : <div style={{ display: 'grid', placeItems: 'center', minHeight: 280, color: COLORS.muted, textAlign: 'center' }}>Generate music and the score will appear here.</div>}
     </div>
   )
 }
