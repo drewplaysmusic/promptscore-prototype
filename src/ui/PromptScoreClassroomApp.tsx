@@ -138,6 +138,14 @@ export default function PromptScoreClassroomApp() {
       const [meterTop, meterBottom] = intent.meter.split('/').map(Number)
       const beatsPerMeasure = meterTop * (4 / meterBottom)
       let basePitches = [...chord.pitches]
+      if (intent.bass) {
+        const bassIndex = basePitches.findIndex((p:any)=>p.step===intent.bass!.step && p.accidental===intent.bass!.accidental)
+        if (bassIndex >= 0) {
+          basePitches = [...basePitches.slice(bassIndex), ...basePitches.slice(0,bassIndex).map((p:any)=>({...p,octave:p.octave+1}))]
+        } else {
+          basePitches = [{...intent.bass}, ...basePitches]
+        }
+      }
       if (intent.arpeggio && intent.octaves > 1) {
         const expanded:any[] = []
         for (let octave=0; octave<intent.octaves; octave++) {
@@ -156,7 +164,7 @@ export default function PromptScoreClassroomApp() {
             const absoluteBeat = i * durationBeats
             return { duration, accidental:p.accidental, isRest:false, pitch:p.step, octave:p.octave, measure:1+Math.floor(absoluteBeat/beatsPerMeasure), beat:1+(absoluteBeat%beatsPerMeasure) }
           })
-        : Array.from({length:intent.repetitions},(_,i) => ({ duration, accidental:intent.root.accidental, isRest:false, pitch:intent.root.step, octave:intent.root.octave, measure:1+Math.floor((i*durationBeats)/beatsPerMeasure), beat:1+((i*durationBeats)%beatsPerMeasure), chordPitches:chord.pitches }))
+        : Array.from({length:intent.repetitions},(_,i) => ({ duration, accidental:intent.root.accidental, isRest:false, pitch:intent.root.step, octave:intent.root.octave, measure:1+Math.floor((i*durationBeats)/beatsPerMeasure), beat:1+((i*durationBeats)%beatsPerMeasure), chordPitches:basePitches }))
       if (intent.measures && notes.length) {
         const original=[...notes]
         let i=0
@@ -168,7 +176,9 @@ export default function PromptScoreClassroomApp() {
         }
         notes=notes.filter(n=>n.measure<=intent.measures)
       }
-      const next:any = { notes, timeSignature:intent.meter, keySignature:'C major', harmony:{ progression:[] }, summary:`Generated ${rootName} ${intent.quality} ${intent.arpeggio?'arpeggio':'chord'}.` }
+      const bassName = intent.bass ? intent.bass.step + (intent.bass.accidental === 'Flat' ? 'b' : intent.bass.accidental === 'Sharp' ? '#' : '') : ''
+      const chordLabel = rootName + (intent.quality==='minor'?'m':intent.quality==='major7'?'maj7':intent.quality==='minor7'?'m7':intent.quality==='dominant7'?'7':intent.quality==='diminished'?'dim':intent.quality==='augmented'?'aug':'') + (bassName ? '/'+bassName : '')
+      const next:any = { notes, timeSignature:intent.meter, keySignature:'C major', harmony:{ progression:[chordLabel] }, summary:`Generated ${chordLabel} ${intent.arpeggio?'arpeggio':'chord'}.` }
       setResult(next); return next
     }
     if (intent.type === 'generate_interval') {
