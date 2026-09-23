@@ -4,7 +4,7 @@ import PromptScoreHarmonyWorkbench from './PromptScoreHarmonyWorkbench'
 import { generateMusicBrainResult, type MusicBrainResult } from '../music/musicBrain'
 import { playScoreNotes } from '../music/PlaybackEngine'
 import { parseMusicIntent } from '../music/MusicIntentGrammar'
-import { getChord, pitchToMidi, midiToPitch, type PitchValue as EnginePitch } from '../music/PitchEngine'
+import { getChord, pitchToMidi, midiToPitch } from '../music/PitchEngine'
 
 type View = 'home' | 'create' | 'learn' | 'teach' | 'studio'
 type Difficulty = 'Easy' | 'Grade Level' | 'Challenge'
@@ -98,9 +98,13 @@ export default function PromptScoreClassroomApp() {
       if (intent.direction === 'descending') pitches = [...pitches].reverse()
       if (intent.direction === 'both') pitches = [...pitches, ...pitches.slice(0,-1).reverse()]
       const rootName = intent.root.step + (intent.root.accidental === 'Flat' ? 'b' : intent.root.accidental === 'Sharp' ? '#' : '')
+      const durationBeats = duration === 'Whole' ? 4 : duration === 'Half' ? 2 : duration === 'Quarter' ? 1 : 0.5
       const notes:any[] = intent.arpeggio
-        ? pitches.map((p, i) => ({ duration, accidental:p.accidental, isRest:false, pitch:p.step, octave:p.octave, measure:1+Math.floor(i/8), beat:1+(i%8)*0.5 }))
-        : [{ duration, accidental:intent.root.accidental, isRest:false, pitch:intent.root.step, octave:intent.root.octave, measure:1, beat:1, chordPitches:pitches }]
+        ? pitches.map((p, i) => {
+            const absoluteBeat = i * durationBeats
+            return { duration, accidental:p.accidental, isRest:false, pitch:p.step, octave:p.octave, measure:1+Math.floor(absoluteBeat/4), beat:1+(absoluteBeat%4) }
+          })
+        : [{ duration:'Whole', accidental:intent.root.accidental, isRest:false, pitch:intent.root.step, octave:intent.root.octave, measure:1, beat:1, chordPitches:pitches }]
       const next:any = { notes, timeSignature:'4/4', keySignature:'C major', harmony:{ progression:[] }, summary:`Generated ${rootName} ${intent.quality} ${intent.arpeggio?'arpeggio':'chord'}.` }
       setResult(next); return next
     }
