@@ -69,6 +69,21 @@ export function parseMusicIntent(raw:string): MusicIntent {
     if (tonic && degrees.length >= 2) return { type:'generate_progression', tonic, mode:/minor/i.test(progressionKey[3] ?? '')?'natural minor':'major', degrees, labels:tokens, meter, raw }
   }
 
+  // Compact chord symbols: Cmaj7, Dm7, G7, F#dim, Bbaug, etc.
+  const chordSymbol = normalizedText.match(/(?:^|\s)([A-Ga-g])([#b]?)(maj7|M7|m7|min7|dom7|dim|aug|maj|major|min|minor|m|7)(?=\s|$)/)
+  if (chordSymbol) {
+    const root = parsePitchText(normalizeRoot(chordSymbol[1],chordSymbol[2]),4)
+    const suffix = chordSymbol[3]
+    const quality = suffix === 'maj7' || suffix === 'M7' ? 'major7'
+      : /^(m7|min7)$/i.test(suffix) ? 'minor7'
+      : /^(7|dom7)$/i.test(suffix) ? 'dominant7'
+      : /^dim$/i.test(suffix) ? 'diminished'
+      : /^aug$/i.test(suffix) ? 'augmented'
+      : /^(m|min|minor)$/i.test(suffix) ? 'minor'
+      : 'major'
+    if (root) return { type:'generate_chord', root, quality, arpeggio:/arpeggio/i.test(text), direction, octaves, rhythm, meter, measures, repetitions, raw }
+  }
+
   if (/\b(chord|triad|arpeggio)\b/i.test(text) && genericRoot) {
     const quality = /minor\s*7|m7\b/i.test(text) ? 'minor7' : /major\s*7|maj7/i.test(text) ? 'major7' : /dominant\s*7|dom7|\b7th?\b/i.test(text) ? 'dominant7' : /diminished|dim\b/i.test(text) ? 'diminished' : /augmented|aug\b/i.test(text) ? 'augmented' : /minor|\bmin\b/i.test(text) ? 'minor' : 'major'
     return { type:'generate_chord', root:genericRoot, quality, arpeggio:/arpeggio/i.test(text), direction, octaves, rhythm, meter, measures, repetitions, raw }
