@@ -97,7 +97,7 @@ export default function PromptScoreClassroomApp() {
         : ['minor','diminished','major','minor','minor','major','major'] as const
       const [meterTop,meterBottom]=intent.meter.split('/').map(Number)
       const beatsPerMeasure=meterTop*(4/meterBottom)
-      const requestedDuration = /eighth/i.test(intent.raw) ? 'Eighth' : /half\s+notes?/i.test(intent.raw) ? 'Half' : /whole\s+notes?/i.test(intent.raw) ? 'Whole' : /quarter/i.test(intent.raw) ? 'Quarter' : null
+      const requestedDuration = /(?:eighth|8ths?|8th)/i.test(intent.raw) ? 'Eighth' : /(?:half(?:\s+notes?)?|halves)/i.test(intent.raw) ? 'Half' : /whole(?:\s+notes?)?/i.test(intent.raw) ? 'Whole' : /(?:quarter|qtr|qtrs)/i.test(intent.raw) ? 'Quarter' : null
       const chordDuration = requestedDuration ?? (beatsPerMeasure >= 4 ? 'Whole' : beatsPerMeasure >= 2 ? 'Half' : 'Quarter')
       const durationBeats = chordDuration === 'Whole' ? 4 : chordDuration === 'Half' ? 2 : chordDuration === 'Quarter' ? 1 : 0.5
       const notes:any[] = intent.degrees.map((degree,i) => {
