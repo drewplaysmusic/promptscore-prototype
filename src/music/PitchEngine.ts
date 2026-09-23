@@ -204,11 +204,20 @@ export function getScalePitches(root: PitchValue, mode: ScaleMode, octaveSpan = 
 }
 
 export function getChord(root: PitchValue, quality: ChordQuality): ChordValue {
-  return {
-    root,
-    quality,
-    pitches: CHORD_INTERVALS[quality].map((interval) => transposePitch(root, interval)),
-  }
+  // Spell chord members diatonically (root/3rd/5th/7th) so Eb major is
+  // Eb-G-Bb rather than D#-G-A#, while still honoring the chord quality.
+  const rootStepIndex = DIATONIC_STEPS.indexOf(root.step)
+  const intervals = CHORD_INTERVALS[quality]
+  const pitches = intervals.map((interval, degree) => {
+    const diatonicDegree = degree * 2
+    const stepOffset = rootStepIndex + diatonicDegree
+    const step = DIATONIC_STEPS[stepOffset % 7]
+    const targetMidi = pitchToMidi(root) + interval
+    const accidental = accidentalForSemitone(step, normalizeModulo(targetMidi, 12))
+    const octave = root.octave + Math.floor(stepOffset / 7)
+    return { step, accidental, octave } as PitchValue
+  })
+  return { root, quality, pitches }
 }
 
 export function getChordVexKeys(chord: ChordValue): string[] {
