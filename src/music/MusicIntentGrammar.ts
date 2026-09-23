@@ -53,8 +53,12 @@ export function parseMusicIntent(raw:string): MusicIntent {
   const octaves = octaveMatch ? ({one:1,two:2,three:3}[octaveMatch[1].toLowerCase()] ?? Number(octaveMatch[1])) : 1
   // Time signatures must look like actual meters. This prevents harmonic
   // slash functions such as V/V, 5/5, V/ii, and 5/2 from being read as meter.
-  const meterMatch = text.match(/(?:^|\s)(2|3|4|5|6|7|9|12)\s*\/\s*(2|4|8|16)(?=\s|$)/)
-  const meter = meterMatch ? `${meterMatch[1]}/${meterMatch[2]}` : '4/4'
+  // Treat slash-number tokens as harmony by default. A meter is recognized
+  // only when explicitly introduced ("in 6/8", "meter 6/8", "time 6/8",
+  // "6/8 time"). This keeps 5/2, 5/5, etc. available for applied harmony.
+  const explicitMeter = text.match(/\b(?:meter|time(?:\s+signature)?|in)\s+(2|3|4|5|6|7|9|12)\s*\/\s*(2|4|8|16)\b/i)
+    ?? text.match(/\b(2|3|4|5|6|7|9|12)\s*\/\s*(2|4|8|16)\s+(?:meter|time)\b/i)
+  const meter = explicitMeter ? `${explicitMeter[1]}/${explicitMeter[2]}` : '4/4'
   const measureMatch = text.match(/\b(\d+)\s+measures?\b/i)
   const measures = measureMatch ? Number(measureMatch[1]) : undefined
   const repeatMatch = text.match(/\b(?:repeat|repeated|play|write)\s+(?:it\s+)?(\d+)\s+times?\b/i)
