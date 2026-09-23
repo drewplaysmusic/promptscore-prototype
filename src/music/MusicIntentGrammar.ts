@@ -2,8 +2,8 @@ import { getScalePitches, parsePitchText, pitchToMidi, type PitchValue, type Sca
 
 export type MusicIntent =
   | { type:'generate_scale'; tonic:PitchValue; scaleType:ScaleMode; direction:'ascending'|'descending'|'both'; octaves:number; rhythm:'quarter'|'eighth'|'half'|'whole'; clef:'treble'|'bass'|'alto'|'tenor'|'auto'; meter:string; bpm?:number; raw:string }
-  | { type:'generate_chord'; root:PitchValue; quality:'major'|'minor'|'diminished'|'augmented'|'dominant7'|'major7'|'minor7'; arpeggio:boolean; direction:'ascending'|'descending'|'both'; rhythm:'quarter'|'eighth'|'half'|'whole'; raw:string }
-  | { type:'generate_interval'; root:PitchValue; interval:string; direction:'above'|'below'; raw:string }
+  | { type:'generate_chord'; root:PitchValue; quality:'major'|'minor'|'diminished'|'augmented'|'dominant7'|'major7'|'minor7'; arpeggio:boolean; direction:'ascending'|'descending'|'both'; octaves:number; rhythm:'quarter'|'eighth'|'half'|'whole'; meter:string; measures?:number; repetitions:number; raw:string }
+  | { type:'generate_interval'; root:PitchValue; interval:string; direction:'above'|'below'; rhythm:'quarter'|'eighth'|'half'|'whole'; meter:string; measures?:number; repetitions:number; raw:string }
   | { type:'unknown'; raw:string }
 
 const SCALE_ALIASES: Array<[RegExp, ScaleMode]> = [
@@ -48,15 +48,19 @@ export function parseMusicIntent(raw:string): MusicIntent {
   const genericRoot = rootMatch ? parsePitchText(normalizeRoot(rootMatch[1],rootMatch[2]),4) : null
   const rhythm = /eighth/i.test(text) ? 'eighth' : /half\s+notes?/i.test(text) ? 'half' : /whole\s+notes?/i.test(text) ? 'whole' : 'quarter'
   const direction = /descending|down(?:ward)?/i.test(text) ? 'descending' : /both|up\s+and\s+down|ascending\s+and\s+descending/i.test(text) ? 'both' : 'ascending'
+  const measureMatch = text.match(/\b(\d+)\s+measures?\b/i)
+  const measures = measureMatch ? Number(measureMatch[1]) : undefined
+  const repeatMatch = text.match(/\b(?:repeat|repeated|play|write)\s+(?:it\s+)?(\d+)\s+times?\b/i)
+  const repetitions = repeatMatch ? Math.max(1, Number(repeatMatch[1])) : 1
 
   if (/\b(chord|triad|arpeggio)\b/i.test(text) && genericRoot) {
     const quality = /minor\s*7|m7\b/i.test(text) ? 'minor7' : /major\s*7|maj7/i.test(text) ? 'major7' : /dominant\s*7|dom7|\b7th?\b/i.test(text) ? 'dominant7' : /diminished|dim\b/i.test(text) ? 'diminished' : /augmented|aug\b/i.test(text) ? 'augmented' : /minor|\bmin\b/i.test(text) ? 'minor' : 'major'
-    return { type:'generate_chord', root:genericRoot, quality, arpeggio:/arpeggio/i.test(text), direction, rhythm, raw }
+    return { type:'generate_chord', root:genericRoot, quality, arpeggio:/arpeggio/i.test(text), direction, octaves, rhythm, meter, measures, repetitions, raw }
   }
 
   if (/\b(interval|unison|second|third|fourth|fifth|sixth|seventh|octave|2nd|3rd|4th|5th|6th|7th|8ve)\b/i.test(text) && genericRoot) {
     const m=text.match(/\b(perfect|major|minor|augmented|diminished)?\s*(unison|second|third|fourth|fifth|sixth|seventh|octave|2nd|3rd|4th|5th|6th|7th|8ve)\b/i)
-    if(m) return { type:'generate_interval', root:genericRoot, interval:[m[1],m[2]].filter(Boolean).join(' ').toLowerCase(), direction:/below|down/i.test(text)?'below':'above', raw }
+    if(m) return { type:'generate_interval', root:genericRoot, interval:[m[1],m[2]].filter(Boolean).join(' ').toLowerCase(), direction:/below|down/i.test(text)?'below':'above', rhythm, meter, measures, repetitions, raw }
   }
   const asksForScale = /\b(scale|mode)\b/i.test(text) || /\b[A-Ga-g](?:#|b|\s*(?:sharp|flat))?\s+(?:major|minor)\b/i.test(text)
   if (!asksForScale) return { type:'unknown', raw }
