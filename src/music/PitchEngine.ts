@@ -164,17 +164,41 @@ export function parsePitchText(text: string, fallbackOctave = 4): PitchValue | n
   return { step, octave, accidental }
 }
 
-export function getScalePitches(root: PitchValue, mode: ScaleMode, octaveSpan = 1): PitchValue[] {
-  const rootMidi = pitchToMidi(root)
-  const pitches: PitchValue[] = []
+const DIATONIC_STEPS: PitchStep[] = ['C','D','E','F','G','A','B']
 
+function accidentalForSemitone(step: PitchStep, targetSemitone: number): PitchAccidental {
+  const natural = STEP_TO_SEMITONE[step]
+  const delta = normalizeModulo(targetSemitone - natural, 12)
+  if (delta === 0) return null
+  if (delta === 1) return 'Sharp'
+  if (delta === 11) return 'Flat'
+  // Current PitchValue supports single accidentals. Rare theoretical double
+  // accidentals fall back to chromatic spelling until that type is expanded.
+  return null
+}
+
+export function getDiatonicScalePitches(root: PitchValue, mode: ScaleMode, octaveSpan = 1): PitchValue[] {
+  const rootMidi = pitchToMidi(root)
+  const rootStepIndex = DIATONIC_STEPS.indexOf(root.step)
+  const pitches: PitchValue[] = []
   for (let octave = 0; octave < Math.max(1, octaveSpan); octave += 1) {
-    SCALE_INTERVALS[mode].forEach((interval) => {
-      pitches.push(midiToPitch(rootMidi + interval + octave * 12))
+    SCALE_INTERVALS[mode].forEach((interval, degree) => {
+      const stepIndex = rootStepIndex + degree
+      const step = DIATONIC_STEPS[stepIndex % 7]
+      const targetMidi = rootMidi + interval + octave * 12
+      const targetSemitone = normalizeModulo(targetMidi,12)
+      const accidental = accidentalForSemitone(step,targetSemitone)
+      const naturalMidiAtC4 = (4 + 1) * 12 + STEP_TO_SEMITONE[step]
+      const relative = targetMidi - naturalMidiAtC4
+      const pitchOctave = 4 + Math.floor(relative / 12)
+      pitches.push({ step, accidental, octave:pitchOctave })
     })
   }
-
   return pitches
+}
+
+export function getScalePitches(root: PitchValue, mode: ScaleMode, octaveSpan = 1): PitchValue[] {
+  return getDiatonicScalePitches(root, mode, octaveSpan)
 }
 
 export function getChord(root: PitchValue, quality: ChordQuality): ChordValue {
