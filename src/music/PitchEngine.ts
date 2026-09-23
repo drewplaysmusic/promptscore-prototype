@@ -220,6 +220,32 @@ export function getChord(root: PitchValue, quality: ChordQuality): ChordValue {
   return { root, quality, pitches }
 }
 
+
+const INTERVAL_DIATONIC_STEPS: Record<string,number> = {
+  'perfect unison':0, unison:0,
+  'minor second':1, 'major second':1, second:1, '2nd':1,
+  'minor third':2, 'major third':2, third:2, '3rd':2,
+  'perfect fourth':3, fourth:3, '4th':3, 'augmented fourth':3,
+  'diminished fifth':4, 'perfect fifth':4, fifth:4, '5th':4,
+  'minor sixth':5, 'major sixth':5, sixth:5, '6th':5,
+  'minor seventh':6, 'major seventh':6, seventh:6, '7th':6,
+  'perfect octave':7, octave:7, '8ve':7,
+}
+
+export function spellIntervalTarget(root: PitchValue, intervalName: string, semitones: number, direction: 'above'|'below' = 'above'): PitchValue {
+  const diatonicSteps = INTERVAL_DIATONIC_STEPS[intervalName] ?? 4
+  const signedSteps = direction === 'below' ? -diatonicSteps : diatonicSteps
+  const signedSemitones = direction === 'below' ? -semitones : semitones
+  const rootIndex = DIATONIC_STEPS.indexOf(root.step)
+  const absoluteStep = rootIndex + signedSteps
+  const normalizedStep = normalizeModulo(absoluteStep, 7)
+  const step = DIATONIC_STEPS[normalizedStep]
+  const octaveShift = Math.floor(absoluteStep / 7)
+  const targetMidi = pitchToMidi(root) + signedSemitones
+  const accidental = accidentalForSemitone(step, normalizeModulo(targetMidi, 12))
+  return { step, accidental, octave: root.octave + octaveShift }
+}
+
 export function getChordVexKeys(chord: ChordValue): string[] {
   return chord.pitches.map(pitchToVexKey)
 }
