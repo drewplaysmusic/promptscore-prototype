@@ -100,7 +100,7 @@ export default function PromptScoreClassroomApp() {
       const chordDuration = beatsPerMeasure >= 4 ? 'Whole' : beatsPerMeasure >= 2 ? 'Half' : 'Quarter'
       const notes:any[] = intent.degrees.map((degree,i) => {
         const root:any = scale[degree-1]
-        const chord = getChord(root, qualities[degree-1])
+        const chord = getChord(root, intent.qualities?.[i] ?? qualities[degree-1])
         return { duration:chordDuration, accidental:root.accidental, isRest:false, pitch:root.step, octave:root.octave, measure:i+1, beat:1, chordPitches:chord.pitches }
       })
       const tonicName=intent.tonic.step+(intent.tonic.accidental==='Flat'?'b':intent.tonic.accidental==='Sharp'?'#':'')
