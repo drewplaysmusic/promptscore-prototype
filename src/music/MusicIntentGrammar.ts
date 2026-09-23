@@ -1,7 +1,7 @@
 import { getScalePitches, parsePitchText, type PitchValue, type ScaleMode } from './PitchEngine'
 
 export type MusicIntent =
-  | { type:'generate_scale'; tonic:PitchValue; scaleType:ScaleMode; direction:'ascending'|'descending'|'both'; octaves:number; rhythm:'quarter'|'eighth'|'half'; raw:string }
+  | { type:'generate_scale'; tonic:PitchValue; scaleType:ScaleMode; direction:'ascending'|'descending'|'both'; octaves:number; rhythm:'quarter'|'eighth'|'half'|'whole'; clef:'treble'|'bass'|'alto'|'tenor'|'auto'; meter:string; bpm?:number; raw:string }
   | { type:'unknown'; raw:string }
 
 const SCALE_ALIASES: Array<[RegExp, ScaleMode]> = [
@@ -47,9 +47,13 @@ export function parseMusicIntent(raw:string): MusicIntent {
     : /both|up\s+and\s+down|ascending\s+and\s+descending/i.test(text) ? 'both' : 'ascending'
   const octaveMatch = text.match(/\b(one|two|three|1|2|3)\s+octaves?\b/i)
   const octaves = octaveMatch ? ({one:1,two:2,three:3}[octaveMatch[1].toLowerCase()] ?? Number(octaveMatch[1])) : 1
-  const rhythm = /eighth/i.test(text) ? 'eighth' : /half\s+notes?/i.test(text) ? 'half' : 'quarter'
+  const rhythm = /eighth/i.test(text) ? 'eighth' : /half\\s+notes?/i.test(text) ? 'half' : /whole\\s+notes?/i.test(text) ? 'whole' : 'quarter'
+  const clef = /bass\\s+clef/i.test(text) ? 'bass' : /alto\\s+clef/i.test(text) ? 'alto' : /tenor\\s+clef/i.test(text) ? 'tenor' : /treble\\s+clef/i.test(text) ? 'treble' : 'auto'
+  const meter = text.match(/\\b(\\d+)\\s*\\/\\s*(\\d+)\\b/)?.slice(1,3).join('/') ?? '4/4'
+  const bpmText = text.match(/\\b(?:at\\s+)?(\\d{2,3})\\s*(?:bpm)?\\b/i)?.[1]
+  const bpm = bpmText ? Number(bpmText) : undefined
 
-  return { type:'generate_scale', tonic, scaleType, direction, octaves, rhythm, raw }
+  return { type:'generate_scale', tonic, scaleType, direction, octaves, rhythm, clef, meter, bpm, raw }
 }
 
 export function resolveScaleIntent(intent: Extract<MusicIntent,{type:'generate_scale'}>) {
