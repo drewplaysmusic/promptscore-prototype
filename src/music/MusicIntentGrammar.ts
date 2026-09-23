@@ -155,7 +155,7 @@ export function parseMusicIntent(raw:string): MusicIntent {
   // Slash-chord / inversion symbols: C/E, C/G, Cmaj7/E, G7/F, etc.
   // This is intentionally parsed before applied-harmony shorthand. Letter/letter
   // means a chord with an explicit bass; number/number remains harmonic function.
-  const slashChord = normalizedText.match(/(?:^|\s)([A-Ga-g])([#b]?)(maj7|M7|m7|min7|dom7|dim|aug|maj|major|min|minor|m|7)?\/([A-Ga-g])([#b]?)(?=\s|$)/)
+  const slashChord = normalizedText.match(/(?:^|\s)([A-Ga-g])([#b]?)(maj7|M7|m7|min7|dom7|dim|aug|maj|major|min|minor|m|7)?\/([A-Ga-g])([#b]?)(?=\s|$)/i)
   if (slashChord) {
     const root = parsePitchText(normalizeRoot(slashChord[1],slashChord[2]),4)
     const bass = parsePitchText(normalizeRoot(slashChord[4],slashChord[5]),3)
