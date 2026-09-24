@@ -17,11 +17,13 @@ export default function ChordChartRenderer({notes,harmonyProgression=[],form}:{n
   const measures=Array.from(new Set(chords.map(c=>c.measure))).sort((a,b)=>a-b)
   const bars=measures.map(m=>({measure:m,chords:chords.filter(c=>c.measure===m).sort((a,b)=>a.beat-b.beat)}))
   const sectionStarts=new Map<number,string>()
+  const navigationText = (notes as any)?.navigation ?? ''
   if(form?.sections?.length && form.bars){
     const barsPerSection=Math.floor(form.bars/form.sections.length)
     form.sections.forEach((s,i)=>sectionStarts.set(1+i*barsPerSection,s.label))
   } else if(form) sectionStarts.set(1,form.name)
 
+  const repeatedBars = bars.map((bar,i)=> i>0 && bar.chords.map(c=>c.symbol).join('|')===bars[i-1].chords.map(c=>c.symbol).join('|'))
   return <div style={{padding:'24px 4px 10px'}}>
     {form && <div style={{marginBottom:18}}>
       <div style={{fontSize:12,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',color:'#60708a'}}>Form</div>
@@ -31,11 +33,21 @@ export default function ChordChartRenderer({notes,harmonyProgression=[],form}:{n
     <div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(110px,1fr))',gap:'20px 8px'}}>
       {bars.map((bar,i)=><div key={bar.measure} style={{position:'relative',minHeight:76,borderLeft:'2px solid #17223b',borderRight:i%4===3?'2px solid #17223b':'1px solid #9aa8bb',padding:'12px 12px 8px',background:'#fff'}}>
         {sectionStarts.has(bar.measure) && <div style={{position:'absolute',top:-19,left:0,fontSize:14,fontWeight:900,color:'#2563eb'}}>{sectionStarts.get(bar.measure)}</div>}
+        {sectionStarts.has(bar.measure) && <div style={{position:'absolute',left:-7,top:24,fontSize:22,fontWeight:900,color:'#17223b'}}>𝄆</div>}
         <div style={{position:'absolute',top:3,right:6,fontSize:9,color:'#9aa8bb'}}>{bar.measure}</div>
         <div style={{display:'grid',gridTemplateColumns:`repeat(${bar.chords.length},1fr)`,alignItems:'center',height:'100%',gap:8}}>
-          {bar.chords.map((ch,j)=><div key={j} style={{fontSize:21,fontWeight:800,color:'#17223b',whiteSpace:'nowrap'}}>{ch.symbol}</div>)}
+          {repeatedBars[i] ? <div style={{gridColumn:'1 / -1',textAlign:'center',fontSize:28,fontWeight:700,color:'#60708a'}}>%</div> : bar.chords.map((ch,j)=><div key={j} style={{fontSize:21,fontWeight:800,color:'#17223b',whiteSpace:'nowrap'}}>{ch.symbol}</div>)}
         </div>
+        {(i===bars.length-1 || sectionStarts.has(bars[i+1]?.measure)) && <div style={{position:'absolute',right:-7,top:24,fontSize:22,fontWeight:900,color:'#17223b'}}>𝄇</div>}
       </div>)}
+    </div>
+    <div style={{display:'flex',flexWrap:'wrap',gap:8,marginTop:20,fontSize:12,fontWeight:800,color:'#60708a'}}>
+      <span style={{border:'1px solid #cfd8e6',borderRadius:7,padding:'5px 8px'}}>1.</span>
+      <span style={{border:'1px solid #cfd8e6',borderRadius:7,padding:'5px 8px'}}>2.</span>
+      <span style={{border:'1px solid #cfd8e6',borderRadius:7,padding:'5px 8px'}}>D.C.</span>
+      <span style={{border:'1px solid #cfd8e6',borderRadius:7,padding:'5px 8px'}}>D.S.</span>
+      <span style={{border:'1px solid #cfd8e6',borderRadius:7,padding:'5px 8px'}}>𝄌 Coda</span>
+      <span style={{border:'1px solid #cfd8e6',borderRadius:7,padding:'5px 8px'}}>Fine</span>
     </div>
   </div>
 }
