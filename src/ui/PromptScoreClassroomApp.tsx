@@ -105,8 +105,11 @@ export default function PromptScoreClassroomApp() {
       const [meterTop,meterBottom]=intent.meter.split('/').map(Number)
       const beatsPerMeasure=meterTop*(4/meterBottom)
       const requestedDuration = /(?:eighth|8ths?|8th)/i.test(intent.raw) ? 'Eighth' : /(?:half(?:\s+notes?)?|halves)/i.test(intent.raw) ? 'Half' : /whole(?:\s+notes?)?/i.test(intent.raw) ? 'Whole' : /(?:quarter|qtr|qtrs)/i.test(intent.raw) ? 'Quarter' : null
-      const chordDuration = requestedDuration ?? (beatsPerMeasure >= 4 ? 'Whole' : beatsPerMeasure >= 2 ? 'Half' : 'Quarter')
-      const durationBeats = chordDuration === 'Whole' ? 4 : chordDuration === 'Half' ? 2 : chordDuration === 'Quarter' ? 1 : 0.5
+      const namedForm = findMusicalPattern(intent.raw)
+      const eventsPerBar = namedForm?.bars ? intent.degrees.length / namedForm.bars : 1
+      const formDurationBeats = eventsPerBar > 1 ? beatsPerMeasure / eventsPerBar : beatsPerMeasure
+      const chordDuration = requestedDuration ?? (formDurationBeats >= 4 ? 'Whole' : formDurationBeats >= 2 ? 'Half' : formDurationBeats >= 1 ? 'Quarter' : 'Eighth')
+      const durationBeats = requestedDuration ? (chordDuration === 'Whole' ? 4 : chordDuration === 'Half' ? 2 : chordDuration === 'Quarter' ? 1 : 0.5) : formDurationBeats
       const notes:any[] = intent.degrees.map((degree,i) => {
         let root:any = scale[degree-1]
         let quality:any = intent.qualities?.[i] ?? qualities[degree-1]
