@@ -307,13 +307,18 @@ function getSmartBeamsAndTuplets(vexNotes: StaveNote[], notes: NoteEvent[]): { b
   return { beams, tuplets }
 }
 
-export default function ScoreRenderer({ notes, timeSignature, keySignature, harmonyProgression = [], showHarmonyOverlay = false, cursorPosition }: {
+function parseNavigation(raw:string) {
+  return { repeat:/\brepeat(?:ed)?\b|\bx\s*2\b/i.test(raw), first:/\b(?:1st|first)\s+ending\b/i.test(raw), second:/\b(?:2nd|second)\s+ending\b/i.test(raw), dc:/\bD\.?C\.?\b|da\s+capo/i.test(raw), ds:/\bD\.?S\.?\b|dal\s+segno/i.test(raw), coda:/\bcoda\b/i.test(raw), fine:/\bfine\b/i.test(raw) }
+}
+
+export default function ScoreRenderer({ notes, timeSignature, keySignature, harmonyProgression = [], showHarmonyOverlay = false, cursorPosition, prompt = '' }: {
   notes: NoteEvent[]
   timeSignature: TimeSignatureValue
   keySignature: KeySignatureValue
   harmonyProgression?: string[]
   showHarmonyOverlay?: boolean
   cursorPosition?: ScoreCursorPosition
+  prompt?: string
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [zoom, setZoom] = useState(1)
@@ -329,6 +334,7 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
     renderer.resize(1180, 1200)
     const context = renderer.getContext()
     const voiceConfig = getVoiceConfig(timeSignature)
+    const nav = parseNavigation(prompt)
 
     measureGroups.forEach((measureNotes, measureIndex) => {
       const systemIndex = Math.floor(measureIndex / 3)
@@ -347,6 +353,23 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
       const measureFrame = createMeasureFrame({ stave, measureIndex, isFirstMeasureOfSystem, x, staveWidth })
       drawPulseGridOverlay(context as any, y, timeSignature, measureIndex, measureFrame)
       stave.draw()
+
+      // Mirror chart navigation markings on the traditional staff score.
+      context.save()
+      context.setFont('Arial', 13, 'bold')
+      context.setFillStyle('#17223b')
+      if (nav.repeat && measureIndex === 0) context.fillText('𝄆', x + 4, y + 48)
+      if (nav.repeat && measureIndex === measureGroups.length - 1) context.fillText('𝄇', x + staveWidth - 24, y + 48)
+      if (nav.first && measureIndex === Math.max(0, measureGroups.length - 2)) {
+        context.fillText('1.', x + 8, y - 10); context.beginPath(); context.moveTo(x + 5,y - 5); context.lineTo(x + staveWidth,y - 5); context.stroke()
+      }
+      if (nav.second && measureIndex === measureGroups.length - 1) {
+        context.fillText('2.', x + 8, y - 10); context.beginPath(); context.moveTo(x + 5,y - 5); context.lineTo(x + staveWidth,y - 5); context.stroke()
+      }
+      if (nav.coda && measureIndex === Math.max(0, measureGroups.length - 2)) context.fillText('𝄌  Coda', x + staveWidth - 72, y - 10)
+      if (nav.fine && measureIndex === measureGroups.length - 1) context.fillText('Fine', x + staveWidth - 42, y - 10)
+      if ((nav.dc || nav.ds) && measureIndex === measureGroups.length - 1) context.fillText((nav.ds?'D.S.':'D.C.') + (nav.coda?' al Coda':nav.fine?' al Fine':''), x + staveWidth - 105, y + 105)
+      context.restore()
 
       if (showHarmonyOverlay && harmonyProgression.length > 0) {
         context.save()
@@ -383,7 +406,7 @@ export default function ScoreRenderer({ notes, timeSignature, keySignature, harm
       tuplets.forEach((tuplet) => tuplet.setContext(context).draw())
       drawScoreCursor(context as any, y, timeSignature, measureIndex, measureFrame, cursorPosition)
     })
-  }, [notes, timeSignature, keySignature, harmonyProgression, showHarmonyOverlay, cursorPosition])
+  }, [notes, timeSignature, keySignature, harmonyProgression, showHarmonyOverlay, cursorPosition, prompt])
 
   return (
     <div style={{ marginTop: 16, width: '100%', border: '1px solid #d4d4d8', borderRadius: 14, background: '#f8fafc', overflow: 'hidden' }}>
