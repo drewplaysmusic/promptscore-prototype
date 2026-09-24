@@ -72,7 +72,7 @@ function ScoreCard({ result, title, onPlay }: { result: MusicBrainResult | null;
         <button onClick={()=>setScoreView('staff')} style={{border:'1px solid '+COLORS.line,borderRadius:9,padding:'7px 12px',background:scoreView==='staff'?COLORS.ink:'#fff',color:scoreView==='staff'?'#fff':COLORS.ink,fontWeight:750,cursor:'pointer'}}>Traditional Score</button>
         <button onClick={()=>setScoreView('chart')} style={{border:'1px solid '+COLORS.line,borderRadius:9,padding:'7px 12px',background:scoreView==='chart'?COLORS.ink:'#fff',color:scoreView==='chart'?'#fff':COLORS.ink,fontWeight:750,cursor:'pointer'}}>Chord Chart</button>
       </div>}
-      {result ? (scoreView==='staff' ? <ScoreRenderer notes={result.notes as any} timeSignature={result.timeSignature as any} keySignature={result.keySignature as any} harmonyProgression={result.harmony.progression} /> : <ChordChartRenderer notes={result.notes as any} harmonyProgression={result.harmony.progression} form={findMusicalPattern(result.summary ?? '') ?? undefined} />) : <div style={{ display: 'grid', placeItems: 'center', minHeight: 280, color: COLORS.muted, textAlign: 'center' }}>Generate music and the score will appear here.</div>}
+      {result ? (scoreView==='staff' ? <ScoreRenderer notes={result.notes as any} timeSignature={result.timeSignature as any} keySignature={result.keySignature as any} harmonyProgression={result.harmony.progression} /> : <ChordChartRenderer notes={result.notes as any} harmonyProgression={result.harmony.progression} form={findMusicalPattern(result.summary ?? '') ?? undefined} prompt={result.sourcePrompt ?? prompt} />) : <div style={{ display: 'grid', placeItems: 'center', minHeight: 280, color: COLORS.muted, textAlign: 'center' }}>Generate music and the score will appear here.</div>}
     </div>
   )
 }
@@ -130,7 +130,7 @@ export default function PromptScoreClassroomApp() {
       })
       const tonicName=intent.tonic.step+(intent.tonic.accidental==='Flat'?'b':intent.tonic.accidental==='Sharp'?'#':'')
       const keySignature=(`${tonicName} ${intent.mode==='major'?'major':'minor'}`) as any
-      const next:any={notes,timeSignature:intent.meter,keySignature,harmony:{progression:intent.labels},summary:`Generated ${intent.labels.join('–')} in ${tonicName}.`}
+      const next:any={notes,timeSignature:intent.meter,keySignature,harmony:{progression:intent.labels},sourcePrompt:intent.raw,summary:`Generated ${intent.labels.join('–')} in ${tonicName}.`}
       setResult(next); return next
     }
     if (intent.type === 'generate_chord') {
