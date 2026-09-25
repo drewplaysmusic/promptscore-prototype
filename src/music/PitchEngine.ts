@@ -164,25 +164,86 @@ export function parsePitchText(text: string, fallbackOctave = 4): PitchValue | n
   return { step, octave, accidental }
 }
 
-export function getScalePitches(root: PitchValue, mode: ScaleMode, octaveSpan = 1): PitchValue[] {
-  const rootMidi = pitchToMidi(root)
-  const pitches: PitchValue[] = []
+const DIATONIC_STEPS: PitchStep[] = ['C','D','E','F','G','A','B']
 
+function accidentalForSemitone(step: PitchStep, targetSemitone: number): PitchAccidental {
+  const natural = STEP_TO_SEMITONE[step]
+  const delta = normalizeModulo(targetSemitone - natural, 12)
+  if (delta === 0) return null
+  if (delta === 1) return 'Sharp'
+  if (delta === 11) return 'Flat'
+  // Current PitchValue supports single accidentals. Rare theoretical double
+  // accidentals fall back to chromatic spelling until that type is expanded.
+  return null
+}
+
+export function getDiatonicScalePitches(root: PitchValue, mode: ScaleMode, octaveSpan = 1): PitchValue[] {
+  const rootMidi = pitchToMidi(root)
+  const rootStepIndex = DIATONIC_STEPS.indexOf(root.step)
+  const pitches: PitchValue[] = []
   for (let octave = 0; octave < Math.max(1, octaveSpan); octave += 1) {
-    SCALE_INTERVALS[mode].forEach((interval) => {
-      pitches.push(midiToPitch(rootMidi + interval + octave * 12))
+    SCALE_INTERVALS[mode].forEach((interval, degree) => {
+      const stepIndex = rootStepIndex + degree
+      const step = DIATONIC_STEPS[stepIndex % 7]
+      const targetMidi = rootMidi + interval + octave * 12
+      const targetSemitone = normalizeModulo(targetMidi,12)
+      const accidental = accidentalForSemitone(step,targetSemitone)
+      // Determine the written octave from diatonic letter progression, not MIDI
+      // semitone math. This matters for flats such as Eb: Eb4 must stay on the
+      // E4 staff position rather than being misclassified as another octave.
+      const diatonicOffset = rootStepIndex + degree
+      const pitchOctave = root.octave + octave + Math.floor(diatonicOffset / 7)
+      pitches.push({ step, accidental, octave:pitchOctave })
     })
   }
-
   return pitches
 }
 
+export function getScalePitches(root: PitchValue, mode: ScaleMode, octaveSpan = 1): PitchValue[] {
+  return getDiatonicScalePitches(root, mode, octaveSpan)
+}
+
 export function getChord(root: PitchValue, quality: ChordQuality): ChordValue {
-  return {
-    root,
-    quality,
-    pitches: CHORD_INTERVALS[quality].map((interval) => transposePitch(root, interval)),
-  }
+  // Spell chord members diatonically (root/3rd/5th/7th) so Eb major is
+  // Eb-G-Bb rather than D#-G-A#, while still honoring the chord quality.
+  const rootStepIndex = DIATONIC_STEPS.indexOf(root.step)
+  const intervals = CHORD_INTERVALS[quality]
+  const pitches = intervals.map((interval, degree) => {
+    const diatonicDegree = degree * 2
+    const stepOffset = rootStepIndex + diatonicDegree
+    const step = DIATONIC_STEPS[stepOffset % 7]
+    const targetMidi = pitchToMidi(root) + interval
+    const accidental = accidentalForSemitone(step, normalizeModulo(targetMidi, 12))
+    const octave = root.octave + Math.floor(stepOffset / 7)
+    return { step, accidental, octave } as PitchValue
+  })
+  return { root, quality, pitches }
+}
+
+
+const INTERVAL_DIATONIC_STEPS: Record<string,number> = {
+  'perfect unison':0, unison:0,
+  'minor second':1, 'major second':1, second:1, '2nd':1,
+  'minor third':2, 'major third':2, third:2, '3rd':2,
+  'perfect fourth':3, fourth:3, '4th':3, 'augmented fourth':3,
+  'diminished fifth':4, 'perfect fifth':4, fifth:4, '5th':4,
+  'minor sixth':5, 'major sixth':5, sixth:5, '6th':5,
+  'minor seventh':6, 'major seventh':6, seventh:6, '7th':6,
+  'perfect octave':7, octave:7, '8ve':7,
+}
+
+export function spellIntervalTarget(root: PitchValue, intervalName: string, semitones: number, direction: 'above'|'below' = 'above'): PitchValue {
+  const diatonicSteps = INTERVAL_DIATONIC_STEPS[intervalName] ?? 4
+  const signedSteps = direction === 'below' ? -diatonicSteps : diatonicSteps
+  const signedSemitones = direction === 'below' ? -semitones : semitones
+  const rootIndex = DIATONIC_STEPS.indexOf(root.step)
+  const absoluteStep = rootIndex + signedSteps
+  const normalizedStep = normalizeModulo(absoluteStep, 7)
+  const step = DIATONIC_STEPS[normalizedStep]
+  const octaveShift = Math.floor(absoluteStep / 7)
+  const targetMidi = pitchToMidi(root) + signedSemitones
+  const accidental = accidentalForSemitone(step, normalizeModulo(targetMidi, 12))
+  return { step, accidental, octave: root.octave + octaveShift }
 }
 
 export function getChordVexKeys(chord: ChordValue): string[] {

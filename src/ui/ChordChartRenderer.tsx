@@ -1,0 +1,64 @@
+import React from 'react'
+import type { MusicalPattern } from '../music/MusicalPatternRegistry'
+
+type ChartChord = { symbol:string; measure:number; beat:number }
+function accidental(a:any){ return a==='Flat'?'b':a==='Sharp'?'#':'' }
+function qualitySuffix(count:number){ return count===4?'7':'' }
+
+type Navigation = { repeat?:boolean; firstEnding?:boolean; secondEnding?:boolean; dc?:boolean; ds?:boolean; coda?:boolean; fine?:boolean }
+
+function parseNavigation(raw:string):Navigation {
+  return {
+    repeat:/\brepeat(?:ed)?\b|\bx\s*2\b/i.test(raw),
+    firstEnding:/\b(?:1st|first)\s+ending\b/i.test(raw),
+    secondEnding:/\b(?:2nd|second)\s+ending\b/i.test(raw),
+    dc:/\bD\.?C\.?\b|da\s+capo/i.test(raw),
+    ds:/\bD\.?S\.?\b|dal\s+segno/i.test(raw),
+    coda:/\bcoda\b/i.test(raw),
+    fine:/\bfine\b/i.test(raw),
+  }
+}
+
+export default function ChordChartRenderer({notes,harmonyProgression=[],form,prompt=''}:{notes:any[];harmonyProgression?:string[];form?:MusicalPattern;prompt?:string}){
+  const chords:ChartChord[]=notes.filter(n=>n.chordPitches?.length).map((n,i)=>{
+    const root=n.chordPitches[0]
+    const label=harmonyProgression[i]
+    const symbol=label && /[A-G]/i.test(label) ? label : `${root.step ?? root.pitch}${accidental(root.accidental)}${qualitySuffix(n.chordPitches.length)}`
+    return {symbol,measure:n.measure ?? i+1,beat:n.beat ?? 1}
+  })
+  if(!chords.length) return <div style={{padding:'42px 12px',textAlign:'center',color:'#60708a'}}>Chord Chart view is available when the generated music contains harmony.</div>
+
+  const measures=Array.from(new Set(chords.map(c=>c.measure))).sort((a,b)=>a-b)
+  const bars=measures.map(m=>({measure:m,chords:chords.filter(c=>c.measure===m).sort((a,b)=>a.beat-b.beat)}))
+  const sectionStarts=new Map<number,string>()
+  const nav=parseNavigation(prompt)
+  if(form?.sections?.length && form.bars){
+    const barsPerSection=Math.floor(form.bars/form.sections.length)
+    form.sections.forEach((s,i)=>sectionStarts.set(1+i*barsPerSection,s.label))
+  } else if(form) sectionStarts.set(1,form.name)
+
+  const repeatedBars = bars.map((bar,i)=> i>0 && bar.chords.map(c=>c.symbol).join('|')===bars[i-1].chords.map(c=>c.symbol).join('|'))
+  return <div style={{padding:'24px 4px 10px'}}>
+    {form && <div style={{marginBottom:18}}>
+      <div style={{fontSize:12,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',color:'#60708a'}}>Form</div>
+      <div style={{fontSize:20,fontWeight:800,color:'#17223b',marginTop:3}}>{form.name}{form.bars ? ` · ${form.bars} bars` : ''}</div>
+      {form.sections && <div style={{fontSize:14,color:'#60708a',marginTop:3}}>{form.sections.map(s=>s.label.replace(/\d+$/,'')).join(' – ')}</div>}
+    </div>}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(4,minmax(110px,1fr))',gap:'20px 8px'}}>
+      {bars.map((bar,i)=><div key={bar.measure} style={{position:'relative',minHeight:76,borderLeft:'2px solid #17223b',borderRight:i%4===3?'2px solid #17223b':'1px solid #9aa8bb',padding:'12px 12px 8px',background:'#fff'}}>
+        {sectionStarts.has(bar.measure) && <div style={{position:'absolute',top:-19,left:0,fontSize:14,fontWeight:900,color:'#2563eb'}}>{sectionStarts.get(bar.measure)}</div>}
+        {(sectionStarts.has(bar.measure) || (nav.repeat && i===0)) && <div style={{position:'absolute',left:-7,top:24,fontSize:22,fontWeight:900,color:'#17223b'}}>𝄆</div>}
+        {nav.firstEnding && i===bars.length-2 && <div style={{position:'absolute',top:-17,left:0,right:0,borderTop:'2px solid #17223b',borderLeft:'2px solid #17223b',paddingLeft:5,fontSize:11,fontWeight:900}}>1.</div>}
+        {nav.secondEnding && i===bars.length-1 && <div style={{position:'absolute',top:-17,left:0,right:0,borderTop:'2px solid #17223b',borderLeft:'2px solid #17223b',paddingLeft:5,fontSize:11,fontWeight:900}}>2.</div>}
+        <div style={{position:'absolute',top:3,right:6,fontSize:9,color:'#9aa8bb'}}>{bar.measure}</div>
+        <div style={{display:'grid',gridTemplateColumns:`repeat(${bar.chords.length},1fr)`,alignItems:'center',height:'100%',gap:8}}>
+          {repeatedBars[i] ? <div style={{gridColumn:'1 / -1',textAlign:'center',fontSize:28,fontWeight:700,color:'#60708a'}}>%</div> : bar.chords.map((ch,j)=><div key={j} style={{fontSize:21,fontWeight:800,color:'#17223b',whiteSpace:'nowrap'}}>{ch.symbol}</div>)}
+        </div>
+        {(sectionStarts.has(bars[i+1]?.measure) || (nav.repeat && i===bars.length-1)) && <div style={{position:'absolute',right:-7,top:24,fontSize:22,fontWeight:900,color:'#17223b'}}>𝄇</div>}
+        {nav.coda && i===bars.length-2 && <div style={{position:'absolute',bottom:2,right:5,fontSize:12,fontWeight:900}}>𝄌 Coda</div>}
+        {nav.fine && i===bars.length-1 && <div style={{position:'absolute',bottom:2,right:5,fontSize:11,fontWeight:900}}>Fine</div>}
+      </div>)}
+    </div>
+    {(nav.dc || nav.ds) && <div style={{marginTop:16,textAlign:'right',fontSize:14,fontWeight:900,color:'#17223b'}}>{nav.ds ? 'D.S.' : 'D.C.'}{nav.coda ? ' al Coda' : nav.fine ? ' al Fine' : ''}</div>}
+  </div>
+}
